@@ -22,6 +22,7 @@ android {
     
     kotlinOptions {
         jvmTarget = "1.8"
+        freeCompilerArgs = freeCompilerArgs + "-opt-in=androidx.tv.material3.ExperimentalTvMaterial3Api"
     }
 
     buildFeatures {
@@ -47,7 +48,8 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
 
     implementation("androidx.tv:tv-foundation:1.0.0-alpha10")
-    implementation("androidx.tv:tv-material:1.0.0")
+    implementation("androidx.tv:tv-material:1.0.0-alpha10")
+    implementation("androidx.navigation:navigation-compose:2.7.7")
 
     implementation("io.coil-kt:coil-compose:2.6.0")
     debugImplementation("androidx.compose.ui:ui-tooling")

@@ -24,6 +24,11 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import androidx.tv.material3.*
 import coil.compose.AsyncImage
 
@@ -38,6 +43,14 @@ object AppColors {
     val OnSurface = Color(0xFFE2E2E5)
     val OnSurfaceVariant = Color(0xFFDDC0B8)
     val SurfaceContainerHighest = Color(0xFF333537)
+}
+
+sealed class Screen(val route: String) {
+    object Home : Screen("home")
+    object Gallery : Screen("gallery")
+    object Detail : Screen("detail/{imageUrl}") {
+        fun createRoute(imageUrl: String) = "detail/${java.net.URLEncoder.encode(imageUrl, "UTF-8")}"
+    }
 }
 
 class MainActivity : ComponentActivity() {
@@ -62,6 +75,8 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun TvApp() {
+    val navController = rememberNavController()
+    
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -100,14 +115,38 @@ fun TvApp() {
         )
 
         Row(modifier = Modifier.fillMaxSize()) {
-            SideNavigation()
-            MainContent(modifier = Modifier.weight(1f))
+            SideNavigation(navController)
+            
+            NavHost(
+                navController = navController,
+                startDestination = Screen.Home.route,
+                modifier = Modifier.weight(1f)
+            ) {
+                composable(Screen.Home.route) {
+                    HomeScreen(navController = navController)
+                }
+                composable(Screen.Gallery.route) {
+                    GalleryScreen(navController = navController)
+                }
+                composable(
+                    route = Screen.Detail.route,
+                    arguments = listOf(androidx.navigation.navArgument("imageUrl") { 
+                        type = androidx.navigation.NavType.StringType 
+                    })
+                ) { backStackEntry ->
+                    val imageUrl = backStackEntry.arguments?.getString("imageUrl") ?: ""
+                    GalleryDetailScreen(imageUrl = imageUrl, navController = navController)
+                }
+            }
         }
     }
 }
 
 @Composable
-fun SideNavigation() {
+fun SideNavigation(navController: NavController) {
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
     Column(
         modifier = Modifier
             .fillMaxHeight()
@@ -128,13 +167,26 @@ fun SideNavigation() {
                 modifier = Modifier.padding(bottom = 48.dp)
             )
 
-            SidebarIcon(icon = Icons.Default.Home, selected = true)
+            SidebarIcon(
+                icon = Icons.Default.Home,
+                selected = currentRoute == Screen.Home.route,
+                onClick = { navController.navigate(Screen.Home.route) {
+                    popUpTo(Screen.Home.route) { inclusive = true }
+                    launchSingleTop = true
+                }}
+            )
             Spacer(modifier = Modifier.height(24.dp))
-            SidebarIcon(icon = Icons.Default.Architecture, selected = false)
+            SidebarIcon(
+                icon = Icons.Default.Architecture,
+                selected = currentRoute == Screen.Gallery.route,
+                onClick = { navController.navigate(Screen.Gallery.route) {
+                    launchSingleTop = true
+                }}
+            )
             Spacer(modifier = Modifier.height(24.dp))
-            SidebarIcon(icon = Icons.AutoMirrored.Filled.TrendingUp, selected = false)
+            SidebarIcon(icon = Icons.AutoMirrored.Filled.TrendingUp, selected = false, onClick = {})
             Spacer(modifier = Modifier.height(24.dp))
-            SidebarIcon(icon = Icons.Default.Settings, selected = false)
+            SidebarIcon(icon = Icons.Default.Settings, selected = false, onClick = {})
         }
 
         Column(
@@ -158,9 +210,9 @@ fun SideNavigation() {
 }
 
 @Composable
-fun SidebarIcon(icon: ImageVector, selected: Boolean) {
+fun SidebarIcon(icon: ImageVector, selected: Boolean, onClick: () -> Unit) {
     Surface(
-        onClick = {},
+        onClick = onClick,
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
             focusedContainerColor = Color(0x22FFFFFF)
@@ -189,7 +241,7 @@ fun SidebarIcon(icon: ImageVector, selected: Boolean) {
 }
 
 @Composable
-fun MainContent(modifier: Modifier = Modifier) {
+fun HomeScreen(navController: NavController, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -197,9 +249,9 @@ fun MainContent(modifier: Modifier = Modifier) {
     ) {
         TopBar()
         Spacer(modifier = Modifier.height(60.dp))
-        HeroSection()
+        HeroSection(navController)
         Spacer(modifier = Modifier.weight(1f))
-        RecentProjectsSection()
+        RecentProjectsSection(navController)
     }
 }
 
@@ -250,25 +302,49 @@ fun TopBar() {
                 }
             }
             Spacer(modifier = Modifier.width(32.dp))
-            Icon(
-                imageVector = Icons.Default.Notifications,
-                contentDescription = "Notifications",
-                tint = Color(0xFFDDDDDD),
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(24.dp))
-            Icon(
-                imageVector = Icons.Default.AccountCircle,
-                contentDescription = "User",
-                tint = Color(0xFFDDDDDD),
-                modifier = Modifier.size(28.dp)
-            )
+            Surface(
+                onClick = { },
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Color.Transparent,
+                    focusedContainerColor = Color(0x22FFFFFF)
+                ),
+                shape = ClickableSurfaceDefaults.shape(CircleShape),
+                modifier = Modifier.size(40.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Icon(
+                        imageVector = Icons.Default.Notifications,
+                        contentDescription = "Notifications",
+                        tint = Color(0xFFDDDDDD),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Surface(
+                onClick = { },
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Color.Transparent,
+                    focusedContainerColor = Color(0x22FFFFFF)
+                ),
+                shape = ClickableSurfaceDefaults.shape(CircleShape),
+                modifier = Modifier.size(40.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Icon(
+                        imageVector = Icons.Default.AccountCircle,
+                        contentDescription = "User",
+                        tint = Color(0xFFDDDDDD),
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-fun HeroSection() {
+fun HeroSection(navController: NavController) {
     Column(modifier = Modifier.fillMaxWidth(0.5f)) {
         Text(
             text = "Redefine your",
@@ -319,7 +395,7 @@ fun HeroSection() {
             }
             Spacer(modifier = Modifier.width(20.dp))
             Button(
-                onClick = { },
+                onClick = { navController.navigate(Screen.Gallery.route) },
                 colors = ButtonDefaults.colors(
                     containerColor = Color(0x33333537),
                     focusedContainerColor = Color(0x66333537),
@@ -335,7 +411,7 @@ fun HeroSection() {
 }
 
 @Composable
-fun RecentProjectsSection() {
+fun RecentProjectsSection(navController: NavController) {
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -356,13 +432,23 @@ fun RecentProjectsSection() {
                     fontWeight = FontWeight.Bold
                 )
             }
-            Text(
-                text = "VIEW ALL",
-                color = AppColors.Tertiary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 2.sp
-            )
+            Surface(
+                onClick = { navController.navigate(Screen.Gallery.route) },
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Color.Transparent,
+                    focusedContainerColor = Color(0x2267D7DA)
+                ),
+                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp))
+            ) {
+                Text(
+                    text = "VIEW ALL",
+                    color = AppColors.Tertiary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
         }
         Spacer(modifier = Modifier.height(24.dp))
         
