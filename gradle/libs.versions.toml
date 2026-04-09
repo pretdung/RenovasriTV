@@ -6,11 +6,12 @@ junitVersion = "1.1.5"
 espressoCore = "3.5.1"
 appcompat = "1.6.1"
 material = "1.10.0"
-kotlin = "1.9.23"
+kotlin = "2.3.20"
 composeBom = "2024.04.01"
 activityCompose = "1.8.2"
 tvCompose = "1.0.0"
 coil = "2.6.0"
+kotlinxCoroutines = "1.8.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -32,7 +33,9 @@ tv-foundation = { group = "androidx.tv", name = "tv-foundation", version.ref = "
 tv-material = { group = "androidx.tv", name = "tv-material", version.ref = "tvCompose" }
 
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

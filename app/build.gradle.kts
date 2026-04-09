@@ -1,16 +1,18 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    kotlin("plugin.serialization") version "2.3.20"
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
     namespace = "com.example.renovasritv"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.renovasritv"
         minSdk = 33
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
     }
@@ -20,16 +22,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_1_8
     }
     
-    kotlinOptions {
-        jvmTarget = "1.8"
-        freeCompilerArgs = freeCompilerArgs + "-opt-in=androidx.tv.material3.ExperimentalTvMaterial3Api"
-    }
+
 
     buildFeatures {
         compose = true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.11"
     }
 }
 
@@ -47,10 +43,31 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material:material-icons-extended")
 
-    implementation("androidx.tv:tv-foundation:1.0.0-alpha10")
-    implementation("androidx.tv:tv-material:1.0.0-alpha10")
+    implementation("androidx.tv:tv-foundation:1.0.0-beta01")
+    implementation("androidx.tv:tv-material:1.0.0-beta01")
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
-    implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation(libs.coil.compose)
+    implementation(libs.kotlinx.coroutines.android)
+    
+    // Supabase
+    implementation(platform("io.github.jan-tennert.supabase:bom:3.5.0"))
+    implementation("io.github.jan-tennert.supabase:postgrest-kt")
+    implementation("io.github.jan-tennert.supabase:realtime-kt")
+    implementation("io.github.jan-tennert.supabase:storage-kt")
+    implementation("io.github.jan-tennert.supabase:auth-kt")
+    
+    // Ktor
+    implementation("io.ktor:ktor-client-android:3.0.0")
+    implementation("io.ktor:ktor-client-content-negotiation:3.0.0")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.0")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+        freeCompilerArgs.add("-opt-in=androidx.tv.material3.ExperimentalTvMaterial3Api")
+    }
 }
