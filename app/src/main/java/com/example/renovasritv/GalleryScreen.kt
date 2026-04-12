@@ -29,10 +29,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -57,6 +59,7 @@ fun GalleryScreen(navController: NavController, viewModel: MainViewModel) {
     }
     
     val galleryItems by viewModel.galleryItems.collectAsState()
+    val screenWidth = LocalConfiguration.current.screenWidthDp
 
     val subConfig = uiConfigs["gallery_header_sub"]
     val mainConfig = uiConfigs["gallery_header_main"]
@@ -76,23 +79,13 @@ fun GalleryScreen(navController: NavController, viewModel: MainViewModel) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
-                Text(
-                    text = headerSub,
-                    color = subConfig?.fontColor?.toComposeColor() ?: MaterialTheme.colorScheme.primary,
-                    fontSize = (subConfig?.fontSize ?: 14).sp,
-                    fontWeight = subConfig?.fontWeight.toFontWeight(),
-                    fontStyle = if (subConfig?.fontStyle == "italic") androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
-                    letterSpacing = 4.sp
-                )
-                Text(
-                    text = headerMain,
-                    color = mainConfig?.fontColor?.toComposeColor() ?: Color.White,
-                    fontSize = (mainConfig?.fontSize ?: 48).sp,
-                    fontWeight = mainConfig?.fontWeight.toFontWeight(),
-                    fontStyle = if (mainConfig?.fontStyle == "italic") androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal
-                )
-            }
+            SectionHeader(
+                subTitle = headerSub,
+                mainTitle = headerMain,
+                subConfig = subConfig,
+                mainConfig = mainConfig,
+                screenWidth = screenWidth
+            )
 
             // Interactive Search Bar
             val keyboardController = LocalSoftwareKeyboardController.current
@@ -236,26 +229,6 @@ fun GalleryScreen(navController: NavController, viewModel: MainViewModel) {
     }
 }
 
-@Composable
-fun FilterChip(text: String, selected: Boolean, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primary else Color(0x22333537),
-            contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else Color.White,
-            focusedContainerColor = if (selected) Color.White else Color(0x44333537),
-            focusedContentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
-        ),
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(20.dp))
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
-            fontSize = 16.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-        )
-    }
-}
 
 @Composable
 fun GalleryGrid(
@@ -263,7 +236,7 @@ fun GalleryGrid(
     items: List<GalleryItem>, 
     selectedFilter: String,
     searchQuery: String,
-    favoriteIds: Set<Long>
+    favoriteIds: Set<String>
 ) {
     val filteredItems = remember(items, selectedFilter, searchQuery) {
         items.filter { item ->
@@ -279,7 +252,7 @@ fun GalleryGrid(
 
     if (filteredItems.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No projects found matching your criteria.", color = Color.Gray, fontSize = 20.sp)
+            Text("No gallery items found matching your criteria.", color = Color.Gray, fontSize = 20.sp)
         }
     } else {
         LazyVerticalGrid(
@@ -303,57 +276,3 @@ fun GalleryGrid(
 
 // GalleryItem removed to Models.kt
 
-@Composable
-fun GalleryCard(item: GalleryItem, index: Int, isFavorite: Boolean, onClick: () -> Unit) {
-    // Asymmetric height based on index
-    val height = when (index % 3) {
-        0 -> 300.dp
-        1 -> 400.dp
-        else -> 350.dp
-    }
-
-    Column {
-        Card(
-            onClick = onClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(height),
-            shape = CardDefaults.shape(RoundedCornerShape(12.dp))
-        ) {
-            Box {
-                AsyncImage(
-                    model = item.imageUrl,
-                    contentDescription = item.title,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-                
-                if (isFavorite) {
-                    Icon(
-                        imageVector = Icons.Default.Favorite,
-                        contentDescription = "Favorite",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(12.dp)
-                            .size(20.dp)
-                    )
-                }
-
-                // Overlay for title on focus (simplified for now)
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.2f))
-                        .padding(16.dp),
-                    contentAlignment = Alignment.BottomStart
-                ) {
-                    Column {
-                        Text(text = item.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Text(text = item.location, color = Color.LightGray, fontSize = 14.sp)
-                    }
-                }
-            }
-        }
-    }
-}

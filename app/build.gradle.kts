@@ -58,6 +58,7 @@ dependencies {
     implementation("io.github.jan-tennert.supabase:auth-kt")
     
     // Ktor
+    implementation("io.ktor:ktor-client-okhttp:3.0.0")
     implementation("io.ktor:ktor-client-android:3.0.0")
     implementation("io.ktor:ktor-client-content-negotiation:3.0.0")
     implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.0")
