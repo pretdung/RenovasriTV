@@ -653,10 +653,10 @@ fun PopupOption(
             focusedContentColor = Color.Black
         ),
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp)),
-        modifier = modifier.fillMaxWidth().height(32.dp)
+        modifier = modifier.fillMaxWidth().height(48.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 20.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(22.dp))
