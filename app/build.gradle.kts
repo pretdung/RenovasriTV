@@ -49,6 +49,7 @@ dependencies {
 
     implementation(libs.coil.compose)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.exp4j)
     
     // Supabase
     implementation(platform("io.github.jan-tennert.supabase:bom:3.5.0"))

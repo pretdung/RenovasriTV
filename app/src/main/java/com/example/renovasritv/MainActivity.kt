@@ -37,6 +37,7 @@ sealed class Screen(val route: String) {
     object Gallery : Screen("gallery")
     object Favorites : Screen("favorites")
     object Consultation : Screen("consultation")
+    object Calculator : Screen("calculator")
     object Detail : Screen("detail/{id}?initialImage={initialImage}") {
         fun createRoute(id: String, initialImage: String? = null) = 
             if (initialImage != null) "detail/$id?initialImage=${java.net.URLEncoder.encode(initialImage, "UTF-8")}"
@@ -178,6 +179,11 @@ fun TvApp() {
                 composable(Screen.Consultation.route) {
                     RouteGuard(pageKey = "page_consultation", viewModel = viewModel) {
                         ConsultationScreen(navController = navController, viewModel = viewModel)
+                    }
+                }
+                composable(Screen.Calculator.route) {
+                    RouteGuard(pageKey = "page_calculator", viewModel = viewModel) {
+                        CalculatorWizardScreen(mainViewModel = viewModel)
                     }
                 }
                 composable(

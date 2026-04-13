@@ -35,6 +35,25 @@ class MainViewModel : ViewModel() {
     private val _appTheme = MutableStateFlow<Map<String, ThemeColor>>(emptyMap())
     val appTheme: StateFlow<Map<String, ThemeColor>> = _appTheme
 
+    // --- CALCULATION ENGINE STATES (FASE 1) ---
+    private val _calcCategories = MutableStateFlow<List<CalcCategory>>(emptyList())
+    val calcCategories: StateFlow<List<CalcCategory>> = _calcCategories
+
+    private val _calcVariables = MutableStateFlow<List<CalcVariable>>(emptyList())
+    val calcVariables: StateFlow<List<CalcVariable>> = _calcVariables
+
+    private val _calcFormulas = MutableStateFlow<List<CalcFormula>>(emptyList())
+    val calcFormulas: StateFlow<List<CalcFormula>> = _calcFormulas
+
+    private val _calcMaterials = MutableStateFlow<List<CalcMaterial>>(emptyList())
+    val calcMaterials: StateFlow<List<CalcMaterial>> = _calcMaterials
+
+    private val _calcFormulaVariables = MutableStateFlow<List<CalcFormulaVariable>>(emptyList())
+    val calcFormulaVariables: StateFlow<List<CalcFormulaVariable>> = _calcFormulaVariables
+
+    private val _calcSystemConfigs = MutableStateFlow<Map<String, CalcSystemConfig>>(emptyMap())
+    val calcSystemConfigs: StateFlow<Map<String, CalcSystemConfig>> = _calcSystemConfigs
+
     init {
         fetchGalleryData()
         fetchMenuBackgrounds()
@@ -42,6 +61,10 @@ class MainViewModel : ViewModel() {
         fetchUIModules()
         fetchAppTheme()
         fetchFavorites()
+        
+        // Fetch Calculator Data
+        fetchCalculatorData()
+        
         setupRealtimeSync()
     }
 
@@ -50,7 +73,8 @@ class MainViewModel : ViewModel() {
             UIModule(key = "home", label = "Home", icon = "Home", orderIndex = 0),
             UIModule(key = "gallery", label = "Gallery", icon = "Architecture", orderIndex = 1),
             UIModule(key = "favorites", label = "Favorites", icon = "Favorite", orderIndex = 2),
-            UIModule(key = "consultation", label = "Consultation", icon = "SupportAgent", orderIndex = 3)
+            UIModule(key = "calculator", label = "Calculator", icon = "Calculate", orderIndex = 3),
+            UIModule(key = "consultation", label = "Consultation", icon = "SupportAgent", orderIndex = 4)
         )
     }
 
@@ -59,7 +83,14 @@ class MainViewModel : ViewModel() {
             UIConfig(key = "AREA_top_bar", value = "true", type = "visibility", isActive = true),
             UIConfig(key = "AREA_hero_section", value = "true", type = "visibility", isActive = true),
             UIConfig(key = "AREA_categories_section", value = "true", type = "visibility", isActive = true),
-            UIConfig(key = "sidebar_logo_text", value = "RENOVASRI", type = "text", isActive = true)
+            UIConfig(key = "sidebar_logo_text", value = "RENOVASRI", type = "text", isActive = true),
+            UIConfig(key = "page_calculator", value = "true", type = "visibility", isActive = true),
+            
+            // Calculator UI Configs
+            UIConfig(key = "calc_step_label", value = "LANGKAH", type = "text", pageId = "page_calculator", fontSize = "caption", fontWeight = "bold", fontColor = "#FFB59E"),
+            UIConfig(key = "calc_title", value = "Kalkulator Renovasi", type = "text", pageId = "page_calculator", fontSize = "headline", fontWeight = "extrabold", fontColor = "#FFFFFF"),
+            UIConfig(key = "calc_item_title", value = "Item Title", type = "style", pageId = "page_calculator", fontSize = "subtitle", fontWeight = "bold", fontColor = "#FFFFFF"),
+            UIConfig(key = "calc_item_desc", value = "Item Desc", type = "style", pageId = "page_calculator", fontSize = "body", fontWeight = "normal", fontColor = "#AAAAAA")
         ).associateBy { it.key }
     }
 
@@ -114,15 +145,17 @@ class MainViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val result = SupabaseConfig.client.from("ui_modules").select().decodeList<UIModule>()
-                if (result.isNotEmpty()) {
-                    // Only use DB modules if they are marked active
-                    val active = result.filter { it.isActive }.sortedBy { it.orderIndex }
-                    if (active.isNotEmpty()) {
-                        _uiModules.value = active
-                    }
+                // Merge logic: use defaults as base, update/add from DB
+                val merged = getDefaultModules().associateBy { it.key }.toMutableMap()
+                result.forEach { module ->
+                    merged[module.key] = module
                 }
+                _uiModules.value = merged.values.filter { it.isActive }.sortedBy { it.orderIndex }
+                println("UI Modules updated: ${_uiModules.value.size} active modules")
             } catch (e: Exception) {
                 println("Supabase UIModules Error: ${e.message}")
+                // Fallback to defaults on error
+                _uiModules.value = getDefaultModules().filter { it.isActive }.sortedBy { it.orderIndex }
             }
         }
     }
@@ -241,6 +274,150 @@ class MainViewModel : ViewModel() {
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+            }
+        }
+    }
+
+    // --- CALCULATION ENGINE FETCHERS (FASE 1) ---
+
+    fun fetchCalculatorData() {
+        fetchCalcCategories()
+        fetchCalcVariables()
+        fetchCalcFormulas()
+        fetchCalcMaterials()
+        fetchCalcFormulaVariables()
+        fetchCalcSystemConfigs()
+    }
+
+    private fun fetchCalcCategories() {
+        viewModelScope.launch {
+            try {
+                val result = SupabaseConfig.client.from("calc_categories").select().decodeList<CalcCategory>()
+                if (result.isEmpty()) {
+                    _calcCategories.value = getFallbackCalcCategories()
+                } else {
+                    _calcCategories.value = result.sortedBy { it.orderIndex }
+                }
+            } catch (e: Exception) {
+                println("Supabase CalcCategories Error: ${e.message}")
+                _calcCategories.value = getFallbackCalcCategories()
+            }
+        }
+    }
+
+    private fun getFallbackCalcCategories(): List<CalcCategory> {
+        return listOf(
+            CalcCategory(id = "cat_lantai", name = "Pemasangan Lantai", description = "Hitung kebutuhan ubin atau parket", orderIndex = 0, isCalculable = true),
+            CalcCategory(id = "cat_dinding", name = "Pengecatan Dinding", description = "Hitung kebutuhan cat interior/eksterior", orderIndex = 1, isCalculable = true),
+            CalcCategory(id = "cat_plafon", name = "Plafon Gypsum", description = "Hitung kebutuhan papan gypsum dan rangka", orderIndex = 2, isCalculable = true)
+        )
+    }
+
+    private fun fetchCalcVariables() {
+        viewModelScope.launch {
+            try {
+                val result = SupabaseConfig.client.from("calc_variables").select().decodeList<CalcVariable>()
+                if (result.isEmpty()) {
+                    _calcVariables.value = getFallbackCalcVariables()
+                } else {
+                    _calcVariables.value = result
+                }
+            } catch (e: Exception) {
+                println("Supabase CalcVariables Error: ${e.message}")
+                _calcVariables.value = getFallbackCalcVariables()
+            }
+        }
+    }
+
+    private fun getFallbackCalcVariables(): List<CalcVariable> {
+        return listOf(
+            CalcVariable(id = "var_p", variableKey = "P", label = "Panjang", unit = "m", minValue = 0f, maxValue = 100f, step = 0.5f),
+            CalcVariable(id = "var_l", variableKey = "L", label = "Lebar", unit = "m", minValue = 0f, maxValue = 100f, step = 0.5f),
+            CalcVariable(id = "var_t", variableKey = "T", label = "Tinggi", unit = "m", minValue = 0f, maxValue = 10f, step = 0.1f)
+        )
+    }
+
+    private fun fetchCalcFormulas() {
+        viewModelScope.launch {
+            try {
+                val result = SupabaseConfig.client.from("calc_formulas").select().decodeList<CalcFormula>()
+                if (result.isEmpty()) {
+                    _calcFormulas.value = getFallbackCalcFormulas()
+                } else {
+                    _calcFormulas.value = result.filter { it.isActive }
+                }
+            } catch (e: Exception) {
+                println("Supabase CalcFormulas Error: ${e.message}")
+                _calcFormulas.value = getFallbackCalcFormulas()
+            }
+        }
+    }
+
+    private fun getFallbackCalcFormulas(): List<CalcFormula> {
+        return listOf(
+            CalcFormula(id = "form_lantai", categoryId = "cat_lantai", formulaName = "Luas Lantai", expression = "P * L"),
+            CalcFormula(id = "form_dinding", categoryId = "cat_dinding", formulaName = "Luas Dinding", expression = "2 * (P + L) * T"),
+            CalcFormula(id = "form_plafon", categoryId = "cat_plafon", formulaName = "Luas Plafon", expression = "P * L")
+        )
+    }
+
+    private fun fetchCalcMaterials() {
+        viewModelScope.launch {
+            try {
+                val result = SupabaseConfig.client.from("calc_materials").select().decodeList<CalcMaterial>()
+                if (result.isEmpty()) {
+                    _calcMaterials.value = getFallbackCalcMaterials()
+                } else {
+                    _calcMaterials.value = result.filter { it.isActive }
+                }
+            } catch (e: Exception) {
+                println("Supabase CalcMaterials Error: ${e.message}")
+                _calcMaterials.value = getFallbackCalcMaterials()
+            }
+        }
+    }
+
+    private fun getFallbackCalcMaterials(): List<CalcMaterial> {
+        return listOf(
+            CalcMaterial(id = "mat_granit", categoryId = "cat_lantai", name = "Granite 60x60", unitType = "m2", basePrice = 250000f),
+            CalcMaterial(id = "mat_cat_premium", categoryId = "cat_dinding", name = "Cat Premium", unitType = "m2", basePrice = 45000f),
+            CalcMaterial(id = "mat_gypsum", categoryId = "cat_plafon", name = "Gypsum Board 9mm", unitType = "m2", basePrice = 85000f)
+        )
+    }
+
+    private fun fetchCalcFormulaVariables() {
+        viewModelScope.launch {
+            try {
+                val result = SupabaseConfig.client.from("calc_formula_variables").select().decodeList<CalcFormulaVariable>()
+                if (result.isEmpty()) {
+                    _calcFormulaVariables.value = getFallbackCalcFormulaVariables()
+                } else {
+                    _calcFormulaVariables.value = result.sortedBy { it.orderIndex }
+                }
+            } catch (e: Exception) {
+                println("Supabase CalcFormulaVariables Error: ${e.message}")
+                _calcFormulaVariables.value = getFallbackCalcFormulaVariables()
+            }
+        }
+    }
+
+    private fun getFallbackCalcFormulaVariables(): List<CalcFormulaVariable> {
+        return listOf(
+            CalcFormulaVariable(id = "fv1", formulaId = "form_lantai", variableId = "var_p", orderIndex = 0),
+            CalcFormulaVariable(id = "fv2", formulaId = "form_lantai", variableId = "var_l", orderIndex = 1),
+            CalcFormulaVariable(id = "fv3", formulaId = "form_dinding", variableId = "var_p", orderIndex = 0),
+            CalcFormulaVariable(id = "fv4", formulaId = "form_dinding", variableId = "var_l", orderIndex = 1),
+            CalcFormulaVariable(id = "fv5", formulaId = "form_dinding", variableId = "var_t", orderIndex = 2)
+        )
+    }
+
+    private fun fetchCalcSystemConfigs() {
+        viewModelScope.launch {
+            try {
+                val result = SupabaseConfig.client.from("calc_system_configs").select().decodeList<CalcSystemConfig>()
+                _calcSystemConfigs.value = result.associateBy { it.key }
+            } catch (e: Exception) {
+                println("Supabase CalcSystemConfigs Error: ${e.message}")
             }
         }
     }

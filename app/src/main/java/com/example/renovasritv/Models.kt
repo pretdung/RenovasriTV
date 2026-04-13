@@ -170,3 +170,82 @@ fun String?.toOverlayOpacity(): Float {
         else -> 0.6f
     }
 }
+
+// --- CALCULATION ENGINE MODELS (FASE 1) ---
+
+@Serializable
+data class CalcCategory(
+    val id: String,
+    @SerialName("parent_id") val parentId: String? = null,
+    val name: String,
+    val description: String? = null,
+    @SerialName("icon_url") val iconUrl: String? = null,
+    @SerialName("order_index") val orderIndex: Int = 0,
+    @SerialName("is_calculable") val isCalculable: Boolean = false
+)
+
+@Serializable
+data class CalcVariable(
+    val id: String,
+    @SerialName("variable_key") val variableKey: String,
+    val label: String,
+    val unit: String? = null,
+    @SerialName("input_type") val inputType: String = "numeric_stepper",
+    @SerialName("min_value") val minValue: Float = 0f,
+    @SerialName("max_value") val maxValue: Float = 100f,
+    val step: Float = 0.1f
+)
+
+@Serializable
+data class CalcFormula(
+    val id: String,
+    @SerialName("category_id") val categoryId: String,
+    @SerialName("formula_name") val formulaName: String,
+    val expression: String,
+    @SerialName("is_active") val isActive: Boolean = true
+)
+
+@Serializable
+data class CalcMaterial(
+    val id: String,
+    @SerialName("category_id") val categoryId: String,
+    val name: String,
+    val description: String? = null,
+    @SerialName("unit_type") val unitType: String,
+    @SerialName("coverage_per_unit") val coveragePerUnit: Float = 1.0f,
+    @SerialName("base_price") val basePrice: Float = 0f,
+    @SerialName("waste_factor") val wasteFactor: Float = 1.05f,
+    @SerialName("image_url") val imageUrl: String? = null,
+    @SerialName("is_active") val isActive: Boolean = true // Added from assessment
+)
+
+@Serializable
+data class CalcFormulaVariable(
+    val id: String,
+    @SerialName("formula_id") val formulaId: String,
+    @SerialName("variable_id") val variableId: String,
+    @SerialName("order_index") val orderIndex: Int = 0
+)
+
+@Serializable
+data class CalcSystemConfig(
+    val key: String,
+    val value: String,
+    val description: String? = null
+)
+
+// --- CALCULATION SNAPSHOT MODELS (FASE 4) ---
+
+@Serializable
+data class CalcSnapshot(
+    val id: String,
+    @SerialName("created_at") val createdAt: Long,
+    @SerialName("category_name") val categoryName: String,
+    @SerialName("material_name") val materialName: String,
+    @SerialName("total_area") val totalArea: Double,
+    @SerialName("total_price") val totalPrice: Double,
+    @SerialName("currency_code") val currencyCode: String = "IDR",
+    val inputs: Map<String, Float> // Storing the variables used (P, L, T etc)
+)
+
+

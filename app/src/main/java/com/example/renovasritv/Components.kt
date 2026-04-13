@@ -171,6 +171,9 @@ fun getIconByName(name: String?): ImageVector? {
         "Notifications" -> Icons.Default.Notifications
         "AccountCircle" -> Icons.Default.AccountCircle
         "AddCircle" -> Icons.Default.AddCircle
+        "Calculate" -> Icons.Default.Calculate
+        "History" -> Icons.Default.History
+        "ReceiptLong" -> Icons.Default.ReceiptLong
         else -> null
     }
 }
