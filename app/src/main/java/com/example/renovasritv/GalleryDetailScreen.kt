@@ -44,13 +44,28 @@ fun GalleryDetailScreen(id: String, initialImageUrl: String? = null, navControll
     val favoriteIds by viewModel.favoriteIds.collectAsState()
     val uiConfigs by viewModel.uiConfigs.collectAsState()
     val uiModules by viewModel.uiModules.collectAsState()
+    val themeMap by viewModel.appTheme.collectAsState()
     val screenWidth = LocalConfiguration.current.screenWidthDp
     
+    // Separate color and transparency logic
+    val sidebarColor = themeMap["sidebar_background"]?.colorHex?.toComposeColor() 
+        ?: themeMap["surface"]?.colorHex?.toComposeColor() 
+        ?: MaterialTheme.colorScheme.surface
+
+    val transparencyRaw = themeMap["sidebar_transparency"]?.colorHex
+    val sidebarAlpha = transparencyRaw?.toFloatOrNull() ?: 0.6f
+
+    val sidebarBg = sidebarColor.copy(alpha = sidebarAlpha)
+
     // Sidebar logic parity with MainActivity
     val activeModules = remember(uiModules) {
         uiModules.filter { it.isActive }.sortedBy { it.orderIndex }
     }
     
+    // Theme background for detail page
+    val themeBgUrl = themeMap["bg_detail"]?.colorHex 
+        ?: "https://xbeslcqosyhyuyxztpov.supabase.co/storage/v1/object/public/media/renovasri-export-1771905706286.jpg"
+
     val item = remember(id, galleryItems) { 
         galleryItems.find { it.id == id }
     }
@@ -206,7 +221,16 @@ fun GalleryDetailScreen(id: String, initialImageUrl: String? = null, navControll
                 }
             }
     ) {
-        // LAYER 1: Main Image (Background Layer)
+        // LAYER 0: Theme Background (Base Layer)
+        AsyncImage(
+            model = themeBgUrl,
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+            alpha = 0.4f // Subdued background
+        )
+
+        // LAYER 1: Main Image (Foreground Layer)
         if (currentImageUrl.isNotEmpty()) {
             androidx.compose.animation.Crossfade(
                 targetState = currentImageUrl,
@@ -237,9 +261,9 @@ fun GalleryDetailScreen(id: String, initialImageUrl: String? = null, navControll
                 .fillMaxSize()
                 .background(
                     Brush.horizontalGradient(
-                        colors = listOf(MaterialTheme.colorScheme.background, Color.Transparent),
+                        colors = listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent),
                         startX = 0f,
-                        endX = 1000f
+                        endX = 1200f
                     )
                 )
                 .zIndex(9f)
@@ -250,7 +274,7 @@ fun GalleryDetailScreen(id: String, initialImageUrl: String? = null, navControll
             modifier = Modifier
                 .fillMaxHeight()
                 .width(100.dp)
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
+                .background(sidebarBg)
                 .zIndex(10f),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
@@ -486,11 +510,11 @@ fun GalleryDetailScreen(id: String, initialImageUrl: String? = null, navControll
             }
         }
 
-        // LAYER 4: Side Drawer (View Options)
+        // LAYER 4: Side Drawer (View Options) - "The Glass Capsule" Derivation
         AnimatedVisibility(
             visible = showPopup,
-            enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
-            exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
+            enter = slideInHorizontally(initialOffsetX = { it / 2 }) + fadeIn(),
+            exit = slideOutHorizontally(targetOffsetX = { it / 2 }) + fadeOut(),
             modifier = Modifier.align(Alignment.CenterEnd).zIndex(20f)
         ) {
             val drawerFocusRequester = remember { FocusRequester() }
@@ -502,67 +526,61 @@ fun GalleryDetailScreen(id: String, initialImageUrl: String? = null, navControll
             }
 
             Surface(
-                shape = RoundedCornerShape(topStart = 32.dp, bottomStart = 32.dp),
+                shape = RoundedCornerShape(32.dp),
                 colors = SurfaceDefaults.colors(
-                    containerColor = Color(0xEE121212),
+                    containerColor = Color(0xCC121212),
                     contentColor = Color.White
                 ),
+                border = Border(androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))),
                 modifier = Modifier
-                    .fillMaxHeight()
-                    .width(400.dp)
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.5f)),
-                            startX = -100f
-                        )
-                    )
+                    .padding(end = 40.dp) // Floating margin from right
+                    .width(320.dp)
+                    .wrapContentHeight()
             ) {
                 Column(
-                    modifier = Modifier.padding(32.dp),
-                    horizontalAlignment = Alignment.Start,
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Top
                 ) {
                     Text(
                         text = "VIEW OPTIONS",
-                        fontSize = 28.sp,
+                        fontSize = 18.sp,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 2.sp
+                        letterSpacing = 3.sp,
+                        modifier = Modifier.padding(bottom = 20.dp)
+
                     )
-                    
-                    Spacer(modifier = Modifier.height(32.dp))
 
                     Column(
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         PopupOption(
                             icon = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            label = if (isFavorite) "Remove from Favorites" else "Add to Favorites",
-                            onClick = {
-                                viewModel.toggleFavorite(id)
-                            },
+                            label = if (isFavorite) "Remove Favorite" else "Add to Favorite",
+                            onClick = { viewModel.toggleFavorite(id) },
                             modifier = Modifier.focusRequester(drawerFocusRequester)
                         )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.1f)))
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         PopupOption(
                             icon = Icons.Default.ZoomIn,
                             label = "Zoom In",
-                            onClick = {
-                                if (zoomLevel < 4.0f) zoomLevel += 0.4f
-                            }
+                            onClick = { if (zoomLevel < 4.0f) zoomLevel += 0.4f }
                         )
 
                         PopupOption(
                             icon = Icons.Default.ZoomOut,
                             label = "Zoom Out",
-                            onClick = {
-                                if (zoomLevel > 1.0f) zoomLevel -= 0.4f
-                            }
+                            onClick = { if (zoomLevel > 1.0f) zoomLevel -= 0.4f }
                         )
 
                         PopupOption(
                             icon = Icons.Default.OpenWith,
-                            label = "Start Panning Mode",
+                            label = "Panning Mode",
                             onClick = {
                                 isInspectionMode = true
                                 showPopup = false
@@ -570,6 +588,10 @@ fun GalleryDetailScreen(id: String, initialImageUrl: String? = null, navControll
                                 focusRequester.requestFocus()
                             }
                         )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.1f)))
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         PopupOption(
                             icon = Icons.Default.Refresh,
@@ -584,26 +606,31 @@ fun GalleryDetailScreen(id: String, initialImageUrl: String? = null, navControll
                         PopupOption(
                             icon = Icons.AutoMirrored.Filled.ArrowBack,
                             label = "Back to Gallery",
-                            onClick = {
-                                navController.popBackStack()
-                            }
+                            onClick = { navController.popBackStack() }
                         )
                     }
 
-                    Spacer(modifier = Modifier.weight(1f))
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                    Button(
+                    Surface(
                         onClick = { 
                             showPopup = false 
                             focusRequester.requestFocus()
                         },
-                        colors = ButtonDefaults.colors(
+                        colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color(0x11FFFFFF),
-                            contentColor = Color.White
+                            focusedContainerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.2f),
+                            focusedContentColor = Color.White
                         ),
-                        modifier = Modifier.fillMaxWidth().height(56.dp)
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp)),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
-                        Text("CLOSE MENU", fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            Text("CLOSE MENU", fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        }
                     }
                 }
             }
@@ -621,23 +648,20 @@ fun PopupOption(
     Surface(
         onClick = onClick,
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color(0x11FFFFFF),
+            containerColor = Color.Transparent,
             focusedContainerColor = Color.White,
             focusedContentColor = Color.Black
         ),
-        border = ClickableSurfaceDefaults.border(
-            focusedBorder = Border(androidx.compose.foundation.BorderStroke(3.dp, MaterialTheme.colorScheme.primary))
-        ),
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
-        modifier = modifier.fillMaxWidth().height(64.dp)
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp)),
+        modifier = modifier.fillMaxWidth().height(32.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 24.dp),
+            modifier = Modifier.padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(28.dp))
+            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(22.dp))
             Spacer(modifier = Modifier.width(16.dp))
-            Text(text = label, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(text = label, fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }
     }
 }

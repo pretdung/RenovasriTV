@@ -20,9 +20,6 @@ class MainViewModel : ViewModel() {
     private val _menuBackgrounds = MutableStateFlow<List<MenuBackground>>(emptyList())
     val menuBackgrounds: StateFlow<List<MenuBackground>> = _menuBackgrounds
 
-    private val _categories = MutableStateFlow<List<Category>>(emptyList())
-    val categories: StateFlow<List<Category>> = _categories
-
     private val _favoriteIds = MutableStateFlow<Set<String>>(emptySet())
     val favoriteIds: StateFlow<Set<String>> = _favoriteIds
 
@@ -32,8 +29,8 @@ class MainViewModel : ViewModel() {
     private val _uiModules = MutableStateFlow<List<UIModule>>(getDefaultModules())
     val uiModules: StateFlow<List<UIModule>> = _uiModules
 
-    private val _homeCurations = MutableStateFlow<List<HomeCuration>>(emptyList())
-    val homeCurations: StateFlow<List<HomeCuration>> = _homeCurations
+    private val _randomGalleryItems = MutableStateFlow<List<GalleryItem>>(emptyList())
+    val randomGalleryItems: StateFlow<List<GalleryItem>> = _randomGalleryItems
 
     private val _appTheme = MutableStateFlow<Map<String, ThemeColor>>(emptyMap())
     val appTheme: StateFlow<Map<String, ThemeColor>> = _appTheme
@@ -41,10 +38,8 @@ class MainViewModel : ViewModel() {
     init {
         fetchGalleryData()
         fetchMenuBackgrounds()
-        fetchCategories()
         fetchUIConfigs()
         fetchUIModules()
-        fetchHomeCurations()
         fetchAppTheme()
         fetchFavorites()
         setupRealtimeSync()
@@ -91,43 +86,8 @@ class MainViewModel : ViewModel() {
                     table = "ui_config"
                 }.onEach { fetchUIConfigs() }.launchIn(viewModelScope)
                 uiChannel.subscribe()
-
-                val curationChannel = SupabaseConfig.client.channel("home_curations_realtime")
-                curationChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                    table = "home_curations"
-                }.onEach { fetchHomeCurations() }.launchIn(viewModelScope)
-                curationChannel.subscribe()
             } catch (e: Exception) {
                 println("Supabase Realtime Error: ${e.message}")
-            }
-        }
-    }
-
-    fun fetchHomeCurations() {
-        viewModelScope.launch {
-            try {
-                val result = SupabaseConfig.client.from("home_curations").select().decodeList<HomeCuration>()
-                if (result.isEmpty()) {
-                    println("DEBUG_LOG: Home Curations - DB returned EMPTY. Applying safety fallback.")
-                    // Aggressive fallback with multiple items to ensure LazyRow renders
-                    _homeCurations.value = listOf(
-                        HomeCuration(id = 1L, imageUrl = "https://xbeslcqosyhyuyxztpov.supabase.co/storage/v1/object/public/media/renovasri-export-1771905706286.jpg", caption = "Modern Living Room", orderIndex = 1, targetId = "550e8400-e29b-41d4-a716-446655440000"),
-                        HomeCuration(id = 2L, imageUrl = "https://xbeslcqosyhyuyxztpov.supabase.co/storage/v1/object/public/media/put-together-a-perfect-guest-room-1976987-hero-223e3e8f697e4b13b62ad4fe898d492d.jpg", caption = "Scandinavian Loft", orderIndex = 2, targetId = "550e8400-e29b-41d4-a716-446655440001"),
-                        HomeCuration(id = 3L, imageUrl = "https://xbeslcqosyhyuyxztpov.supabase.co/storage/v1/object/public/media/9.jpeg", caption = "Industrial Workspace", orderIndex = 3, targetId = "550e8400-e29b-41d4-a716-446655440002")
-                    )
-                } else {
-                    _homeCurations.value = result.sortedBy { it.orderIndex }
-                    println("DEBUG_LOG: Home Curations - Successfully loaded ${result.size} items from DB")
-                    result.forEach { 
-                        println("DEBUG_LOG: Item ID: ${it.id}, URL: ${it.imageUrl}, Target: ${it.targetId}, Active: ${it.isActive}")
-                    }
-                }
-            } catch (e: Exception) {
-                println("DEBUG_LOG: Home Curations ERROR - ${e.message}")
-                // Fallback on error too
-                _homeCurations.value = listOf(
-                    HomeCuration(id = 1L, imageUrl = "https://xbeslcqosyhyuyxztpov.supabase.co/storage/v1/object/public/media/renovasri-export-1771905706286.jpg", caption = "Modern Living Room", orderIndex = 1, targetId = "550e8400-e29b-41d4-a716-446655440000")
-                )
             }
         }
     }
@@ -174,15 +134,23 @@ class MainViewModel : ViewModel() {
                 val result = SupabaseConfig.client.from("gallery_items").select().decodeList<GalleryItem>()
                 if (result.isEmpty()) {
                     println("DEBUG_LOG: Gallery - DB returned EMPTY. Applying safety fallback.")
-                    _galleryItems.value = getFallbackGalleryItems()
+                    val fallback = getFallbackGalleryItems()
+                    _galleryItems.value = fallback
+                    _randomGalleryItems.value = fallback.shuffled().take(5)
                 } else {
                     _galleryItems.value = result
-                    println("DEBUG_LOG: Gallery - Successfully loaded ${result.size} items")
+                    // Pick 5 random featured items for Home
+                    val featured = result.filter { it.isFeatured }
+                    val displayItems = if (featured.isNotEmpty()) featured else result
+                    _randomGalleryItems.value = displayItems.shuffled().take(5)
+                    println("DEBUG_LOG: Gallery - Loaded ${result.size} items. Random Home: ${_randomGalleryItems.value.size}")
                 }
             } catch (e: Exception) {
                 println("DEBUG_LOG: Gallery ERROR - ${e.message}")
                 e.printStackTrace()
-                _galleryItems.value = getFallbackGalleryItems()
+                val fallback = getFallbackGalleryItems()
+                _galleryItems.value = fallback
+                _randomGalleryItems.value = fallback.shuffled().take(5)
             }
         }
     }
@@ -206,16 +174,6 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    fun fetchCategories() {
-        viewModelScope.launch {
-            try {
-                val result = SupabaseConfig.client.from("categories").select().decodeList<Category>()
-                _categories.value = result
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
 
     fun fetchAppTheme() {
         viewModelScope.launch {

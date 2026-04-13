@@ -10,6 +10,7 @@ import kotlinx.serialization.SerialName
 data class GalleryItem(
     val id: String? = null,
     val title: String,
+    val caption: String? = null, // New
     val description: String? = null,
     val location: String,
     @SerialName("image_url")
@@ -20,26 +21,12 @@ data class GalleryItem(
     @SerialName("architect_name")
     val architectName: String? = null,
     val year: Int? = null,
-    val views: Int = 0
+    val views: Int = 0,
+    @SerialName("order_index") val orderIndex: Int = 0, // New
+    @SerialName("is_featured") val isFeatured: Boolean = false // New
 )
 
 typealias ProjectItem = GalleryItem
-
-@Serializable
-data class Category(
-    val id: String? = null,
-    val name: String
-)
-
-@Serializable
-data class HomeCuration(
-    val id: Long? = null, // Reverted to Long? as DB is returning Integers (causing JSON decode error)
-    @SerialName("image_url") val imageUrl: String,
-    val caption: String? = null,
-    @SerialName("order_index") val orderIndex: Int = 0,
-    @SerialName("is_active") val isActive: Boolean = true,
-    @SerialName("target_id") val targetId: String? = null
-)
 
 @Serializable
 data class MenuBackground(

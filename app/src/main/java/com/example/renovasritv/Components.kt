@@ -178,54 +178,75 @@ fun getIconByName(name: String?): ImageVector? {
 
 @Composable
 fun GalleryCard(item: GalleryItem, index: Int, isFavorite: Boolean, onClick: () -> Unit) {
-    // Asymmetric height based on index
-    val height = when (index % 3) {
-        0 -> 300.dp
-        1 -> 400.dp
-        else -> 350.dp
-    }
-
-    Column {
-        Card(
-            onClick = onClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(height),
-            shape = CardDefaults.shape(RoundedCornerShape(12.dp))
-        ) {
-            Box {
-                AsyncImage(
-                    model = item.imageUrl,
-                    contentDescription = item.title,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-                
-                if (isFavorite) {
-                    Icon(
-                        imageVector = Icons.Default.Favorite,
-                        contentDescription = "Favorite",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(12.dp)
-                            .size(20.dp)
+    Surface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color(0x22333537),
+            focusedContainerColor = Color.White,
+            focusedContentColor = Color.Black
+        ),
+        modifier = Modifier
+            .width(400.dp)
+            .aspectRatio(16f / 9f)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            AsyncImage(
+                model = item.imageUrl,
+                contentDescription = item.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            
+            // Center-focused scrim for text readability
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                            colors = listOf(Color.Black.copy(alpha = 0.3f), Color.Black.copy(alpha = 0.7f)),
+                            radius = 600f
+                        )
                     )
-                }
+            )
 
-                // Overlay for title on focus (simplified for now)
-                Box(
+            if (isFavorite) {
+                Icon(
+                    imageVector = Icons.Default.Favorite,
+                    contentDescription = "Favorite",
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.2f))
-                        .padding(16.dp),
-                    contentAlignment = Alignment.BottomStart
-                ) {
-                    Column {
-                        Text(text = item.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Text(text = item.location, color = Color.LightGray, fontSize = 14.sp)
-                    }
-                }
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                        .size(24.dp)
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(horizontal = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = item.title.uppercase(),
+                    color = Color.White,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = item.location,
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    letterSpacing = 0.5.sp
+                )
             }
         }
     }

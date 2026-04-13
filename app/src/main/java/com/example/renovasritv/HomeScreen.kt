@@ -34,7 +34,7 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     val projects by viewModel.projects.collectAsState()
-    val homeCurations by viewModel.homeCurations.collectAsState()
+    val randomItems by viewModel.randomGalleryItems.collectAsState()
     val uiConfigs by viewModel.uiConfigs.collectAsState()
 
     LazyColumn(
@@ -59,7 +59,7 @@ fun HomeScreen(
         
         if (uiConfigs.isModuleVisible("AREA_categories_section")) {
             item {
-                FeaturedCategoriesSection(navController, homeCurations, uiConfigs)
+                FeaturedCategoriesSection(navController, randomItems, uiConfigs)
             }
         }
     }
@@ -206,7 +206,7 @@ fun HeroSection(navController: NavController, uiConfigs: Map<String, UIConfig> =
 @Composable
 fun FeaturedCategoriesSection(
     navController: NavController, 
-    curations: List<HomeCuration>, 
+    curations: List<GalleryItem>, 
     uiConfigs: Map<String, UIConfig> = emptyMap()
 ) {
     val sectionTitle = uiConfigs["categories_section_title"]?.value ?: "Design Categories"
@@ -248,7 +248,7 @@ fun FeaturedCategoriesSection(
                 items(curations) { curation ->
                     Surface(
                         onClick = { 
-                            val targetId = curation.targetId ?: curation.id?.toString() ?: ""
+                            val targetId = curation.id ?: ""
                             if (targetId.isNotEmpty()) {
                                 navController.navigate(Screen.Detail.createRoute(targetId, curation.imageUrl))
                             }
@@ -285,7 +285,7 @@ fun FeaturedCategoriesSection(
                                 modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
                             ) {
                                 Text(
-                                    text = curation.caption ?: "Inspiring Space",
+                                    text = curation.caption ?: curation.title,
                                     color = Color.White,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,

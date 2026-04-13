@@ -84,27 +84,39 @@ fun TvApp() {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val menuBackgrounds by viewModel.menuBackgrounds.collectAsState()
+    val themeMap by viewModel.appTheme.collectAsState()
 
-    // Find the matching background configuration
-    val currentConfig = remember(currentRoute, menuBackgrounds) {
-        // Strip arguments for pattern matching (e.g., "detail/{imageUrl}" -> "detail")
-        val baseRoute = currentRoute?.substringBefore("/")
-        menuBackgrounds.find { it.menuKey == currentRoute || it.menuKey == baseRoute }
+    // Map null route to Home to ensure we always have a config if possible
+    val effectiveRoute = currentRoute ?: Screen.Home.route
+
+    // 1. Try to find background from the Theme system (theme_colors table)
+    // Keys used: bg_home, bg_gallery, bg_favorites, bg_consultation, bg_detail
+    val baseRoute = effectiveRoute.substringBefore("/")
+    val themeBgKey = "bg_$baseRoute"
+    val themeBgUrl = themeMap[themeBgKey]?.colorHex
+
+    // 2. Fallback to global menu_backgrounds if not in theme
+    val currentConfig = remember(effectiveRoute, menuBackgrounds) {
+        menuBackgrounds.find { it.menuKey == effectiveRoute || it.menuKey == baseRoute }
     }
 
-    val backgroundImage = currentConfig?.imageUrl
-        ?: "https://lh3.googleusercontent.com/aida-public/AB6AXuAh0nYqyiUrKIiX-zNzcnAGgRuY3x-B2LeenQ4fdUqYeXO7Q3aotOML0wRrbv7Qoxb5G7T3gghfKtNZck16FE_j2raPaTVqq071qiG2ZuTGZvQBhJyCYrbWa3glcvwXyPCuaAvSCvEwyzBgRIPsv_4YFHFiqKGH_P9koUUxxu7ZhHuAsuaPNZlrxriwAuB2Wej3AR_pK3Wk-6KXDIORZu_D_uU26Q0sLGTfKVUurWrhTVpK4CSJ5TcniE807FaHKqiXSgRHiVNyarQU"
-    val backgroundAlpha = currentConfig?.overlayOpacity.toOverlayOpacity()
+    val backgroundImage = themeBgUrl 
+        ?: currentConfig?.imageUrl
+        ?: "https://xbeslcqosyhyuyxztpov.supabase.co/storage/v1/object/public/media/renovasri-export-1771905706286.jpg"
+    
+    // Ensure background is always visible with a higher minimum alpha
+    val rawAlpha = currentConfig?.overlayOpacity.toOverlayOpacity()
+    val backgroundAlpha = if (rawAlpha < 0.4f) 0.5f else rawAlpha
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(Color.Black)
     ) {
-        // Always show global background as a fallback/scrim layer
+        // Background Image with explicit key for Crossfade
         Crossfade(
             targetState = backgroundImage,
-            animationSpec = tween(durationMillis = 1000),
+            animationSpec = tween(durationMillis = 800),
             label = "BackgroundTransition"
         ) { targetImage ->
             AsyncImage(
@@ -112,19 +124,20 @@ fun TvApp() {
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
-                alpha = backgroundAlpha
+                alpha = backgroundAlpha,
+                error = androidx.compose.ui.res.painterResource(android.R.drawable.ic_menu_report_image)
             )
         }
         
-        // Gradient Scrims
+        // Very Soft Gradient Scrims
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.horizontalGradient(
-                        colors = listOf(MaterialTheme.colorScheme.background, Color.Transparent),
+                        colors = listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent),
                         startX = 0f,
-                        endX = 1000f
+                        endX = 1200f // Wider gradient for smoother transition
                     )
                 )
         )
@@ -133,8 +146,8 @@ fun TvApp() {
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, MaterialTheme.colorScheme.background),
-                        startY = 500f
+                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.5f)),
+                        startY = 600f
                     )
                 )
         )
@@ -192,11 +205,21 @@ fun TvApp() {
 fun SideNavigation(navController: NavController, viewModel: MainViewModel) {
     val uiConfigs by viewModel.uiConfigs.collectAsState()
     val uiModules by viewModel.uiModules.collectAsState()
+    val themeMap by viewModel.appTheme.collectAsState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val screenWidth = LocalConfiguration.current.screenWidthDp
     
-    // Use the dedicated modules table for the sidebar
+    // Separate color and transparency logic
+    val sidebarColor = themeMap["sidebar_background"]?.colorHex?.toComposeColor() 
+        ?: themeMap["surface"]?.colorHex?.toComposeColor() 
+        ?: MaterialTheme.colorScheme.surface
+
+    val transparencyRaw = themeMap["sidebar_transparency"]?.colorHex
+    val sidebarAlpha = transparencyRaw?.toFloatOrNull() ?: 0.6f
+
+    val sidebarBg = sidebarColor.copy(alpha = sidebarAlpha)
+
     val activeModules = remember(uiModules) {
         uiModules.filter { it.isActive }.sortedBy { it.orderIndex }
     }
@@ -209,7 +232,7 @@ fun SideNavigation(navController: NavController, viewModel: MainViewModel) {
         modifier = Modifier
             .fillMaxHeight()
             .width(100.dp)
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)),
+            .background(sidebarBg),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {

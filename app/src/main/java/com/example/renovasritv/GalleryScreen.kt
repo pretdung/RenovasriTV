@@ -7,6 +7,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -47,18 +49,18 @@ fun GalleryScreen(navController: NavController, viewModel: MainViewModel) {
     var searchQuery by remember { mutableStateOf("") }
     var isSearchFocused by remember { mutableStateOf(false) }
 
-    val categories by viewModel.categories.collectAsState()
+    val galleryItems by viewModel.galleryItems.collectAsState()
     val uiConfigs by viewModel.uiConfigs.collectAsState()
 
-    val filters = remember(categories) {
-        val dynamicCategories = categories
-            .map { it.name.trim() }
+    val filters = remember(galleryItems) {
+        val dynamicCategories = galleryItems
+            .map { it.category.trim() }
             .filter { it.isNotBlank() && !it.equals("All", ignoreCase = true) }
-            .distinctBy { it.lowercase() }
+            .distinct()
+            .sorted()
         listOf("All") + dynamicCategories
     }
     
-    val galleryItems by viewModel.galleryItems.collectAsState()
     val screenWidth = LocalConfiguration.current.screenWidthDp
 
     val subConfig = uiConfigs["gallery_header_sub"]
@@ -71,11 +73,11 @@ fun GalleryScreen(navController: NavController, viewModel: MainViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 48.dp, vertical = 32.dp)
+            .padding(vertical = 32.dp)
     ) {
         // Header
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 48.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -204,16 +206,19 @@ fun GalleryScreen(navController: NavController, viewModel: MainViewModel) {
             }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         // Filter Chips
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            filters.forEach { filter ->
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(35.dp),
+            contentPadding = PaddingValues(start = 48.dp, bottom = 32.dp, end = 48.dp),
+        ) {
+            items(filters) { filterName ->
                 FilterChip(
-                    text = filter,
-                    selected = selectedFilter == filter,
+                    text = filterName,
+                    selected = selectedFilter == filterName,
                     onClick = { 
-                        selectedFilter = filter
+                        selectedFilter = filterName
                         searchQuery = "" // Reset search when filtering by category
                     }
                 )
@@ -224,8 +229,10 @@ fun GalleryScreen(navController: NavController, viewModel: MainViewModel) {
 
         val favoriteIds by viewModel.favoriteIds.collectAsState()
 
-        // Editorial Grid with Filtering Logic
-        GalleryGrid(navController, galleryItems, selectedFilter, searchQuery, favoriteIds)
+        // Editorial Grid with Filtering Logic - Occupy remaining space
+        Box(modifier = Modifier.weight(1f)) {
+            GalleryGrid(navController, galleryItems, selectedFilter, searchQuery, favoriteIds)
+        }
     }
 }
 
@@ -240,7 +247,7 @@ fun GalleryGrid(
 ) {
     val filteredItems = remember(items, selectedFilter, searchQuery) {
         items.filter { item ->
-            val matchesFilter = selectedFilter == "All" || item.category == selectedFilter
+            val matchesFilter = selectedFilter == "All" || item.category.trim() == selectedFilter
             val matchesSearch = searchQuery.isEmpty() || 
                 item.title.contains(searchQuery, ignoreCase = true) || 
                 item.location.contains(searchQuery, ignoreCase = true) ||
@@ -255,18 +262,17 @@ fun GalleryGrid(
             Text("No gallery items found matching your criteria.", color = Color.Gray, fontSize = 20.sp)
         }
     } else {
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
-            contentPadding = PaddingValues(bottom = 48.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+        LazyRow(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 58.dp, bottom = 40.dp, end = 48.dp),
+            horizontalArrangement = Arrangement.spacedBy(40.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            items(filteredItems.size) { index ->
-                val item = filteredItems[index]
+            items(filteredItems) { item ->
                 val isFavorite = item.id?.let { favoriteIds.contains(it) } ?: false
-                GalleryCard(item, index, isFavorite, onClick = {
+                GalleryCard(item, 0, isFavorite, onClick = {
                     item.id?.let { id ->
-                        navController.navigate(Screen.Detail.createRoute(id))
+                        navController.navigate(Screen.Detail.createRoute(id, item.imageUrl))
                     }
                 })
             }
