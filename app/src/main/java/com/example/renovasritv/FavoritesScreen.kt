@@ -37,10 +37,12 @@ fun FavoritesScreen(navController: NavController, viewModel: MainViewModel) {
     val subConfig = uiConfigs["favorites_header_sub"]
     val mainConfig = uiConfigs["favorites_header_main"]
     val emptyStateConfig = uiConfigs["favorites_empty_text"]
+    val iconConfig = uiConfigs["favorites_header_icon"]
     
     val headerSub = subConfig?.value ?: "YOUR COLLECTION"
     val headerMain = mainConfig?.value ?: "Saved Projects"
     val emptyText = emptyStateConfig?.value ?: "You haven't saved any projects yet. Explore the gallery to find inspiration!"
+    val headerIcon = getIconByName(iconConfig?.value) ?: Icons.Default.Favorite
 
     Column(
         modifier = Modifier
@@ -53,19 +55,19 @@ fun FavoritesScreen(navController: NavController, viewModel: MainViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = Icons.Default.Favorite,
+                imageVector = headerIcon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(40.dp)
+                tint = iconConfig?.fontColor?.toComposeColor() ?: MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(iconConfig?.fontSize.toIconSize())
             )
             Spacer(modifier = Modifier.width(20.dp))
-        SectionHeader(
-            subTitle = headerSub,
-            mainTitle = headerMain,
-            subConfig = subConfig,
-            mainConfig = mainConfig,
-            screenWidth = screenWidth
-        )
+            SectionHeader(
+                subTitle = headerSub,
+                mainTitle = headerMain,
+                subConfig = subConfig,
+                mainConfig = mainConfig,
+                screenWidth = screenWidth
+            )
         }
 
         Spacer(modifier = Modifier.height(48.dp))

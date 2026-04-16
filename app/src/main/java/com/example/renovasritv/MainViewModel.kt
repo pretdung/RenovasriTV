@@ -1,18 +1,27 @@
 package com.example.renovasritv
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import java.io.File
 
-class MainViewModel : ViewModel() {
+class MainViewModel(application: Application) : AndroidViewModel(application) {
+    private val estimationFile = File(getApplication<Application>().filesDir, "estimations_cache.json")
     private val _galleryItems = MutableStateFlow<List<GalleryItem>>(emptyList())
     val galleryItems: StateFlow<List<GalleryItem>> = _galleryItems
     val projects: StateFlow<List<GalleryItem>> = _galleryItems
@@ -39,6 +48,9 @@ class MainViewModel : ViewModel() {
     private val _calcCategories = MutableStateFlow<List<CalcCategory>>(emptyList())
     val calcCategories: StateFlow<List<CalcCategory>> = _calcCategories
 
+    private val _calcLaborCategories = MutableStateFlow<List<CalcLaborCategory>>(emptyList())
+    val calcLaborCategories: StateFlow<List<CalcLaborCategory>> = _calcLaborCategories
+
     private val _calcVariables = MutableStateFlow<List<CalcVariable>>(emptyList())
     val calcVariables: StateFlow<List<CalcVariable>> = _calcVariables
 
@@ -51,10 +63,17 @@ class MainViewModel : ViewModel() {
     private val _calcFormulaVariables = MutableStateFlow<List<CalcFormulaVariable>>(emptyList())
     val calcFormulaVariables: StateFlow<List<CalcFormulaVariable>> = _calcFormulaVariables
 
-    private val _calcSystemConfigs = MutableStateFlow<Map<String, CalcSystemConfig>>(emptyMap())
+    private val _laborConfigs = MutableStateFlow<List<LaborConfig>>(emptyList())
+    val laborConfigs: StateFlow<List<LaborConfig>> = _laborConfigs
+
+    private val _calcSystemConfigs = MutableStateFlow<Map<String, CalcSystemConfig>>(getDefaultCalcSystemConfigs())
     val calcSystemConfigs: StateFlow<Map<String, CalcSystemConfig>> = _calcSystemConfigs
 
+    private val _estimations = MutableStateFlow<List<CalcEstimation>>(emptyList())
+    val estimations: StateFlow<List<CalcEstimation>> = _estimations
+
     init {
+        loadEstimationsFromLocal()
         fetchGalleryData()
         fetchMenuBackgrounds()
         fetchUIConfigs()
@@ -74,7 +93,8 @@ class MainViewModel : ViewModel() {
             UIModule(key = "gallery", label = "Gallery", icon = "Architecture", orderIndex = 1),
             UIModule(key = "favorites", label = "Favorites", icon = "Favorite", orderIndex = 2),
             UIModule(key = "calculator", label = "Calculator", icon = "Calculate", orderIndex = 3),
-            UIModule(key = "consultation", label = "Consultation", icon = "SupportAgent", orderIndex = 4)
+            UIModule(key = "history", label = "History", icon = "History", orderIndex = 4),
+            UIModule(key = "consultation", label = "Consultation", icon = "SupportAgent", orderIndex = 5)
         )
     }
 
@@ -90,7 +110,9 @@ class MainViewModel : ViewModel() {
             UIConfig(key = "calc_step_label", value = "LANGKAH", type = "text", pageId = "page_calculator", fontSize = "caption", fontWeight = "bold", fontColor = "#FFB59E"),
             UIConfig(key = "calc_title", value = "Kalkulator Renovasi", type = "text", pageId = "page_calculator", fontSize = "headline", fontWeight = "extrabold", fontColor = "#FFFFFF"),
             UIConfig(key = "calc_item_title", value = "Item Title", type = "style", pageId = "page_calculator", fontSize = "subtitle", fontWeight = "bold", fontColor = "#FFFFFF"),
-            UIConfig(key = "calc_item_desc", value = "Item Desc", type = "style", pageId = "page_calculator", fontSize = "body", fontWeight = "normal", fontColor = "#AAAAAA")
+            UIConfig(key = "calc_item_desc", value = "Item Desc", type = "style", pageId = "page_calculator", fontSize = "body", fontWeight = "normal", fontColor = "#AAAAAA"),
+            UIConfig(key = "calc_input_label", value = "Input Label", type = "style", pageId = "page_calculator", fontSize = "body", fontWeight = "bold", fontColor = "#AAAAAA"),
+            UIConfig(key = "calc_input_value", value = "Input Value", type = "style", pageId = "page_calculator", fontSize = "title", fontWeight = "black", fontColor = "#FFFFFF")
         ).associateBy { it.key }
     }
 
@@ -282,11 +304,83 @@ class MainViewModel : ViewModel() {
 
     fun fetchCalculatorData() {
         fetchCalcCategories()
+        fetchCalcLaborCategories()
         fetchCalcVariables()
         fetchCalcFormulas()
         fetchCalcMaterials()
         fetchCalcFormulaVariables()
+        fetchLaborConfigs()
         fetchCalcSystemConfigs()
+        fetchEstimations()
+    }
+
+    private fun loadEstimationsFromLocal() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                if (estimationFile.exists()) {
+                    val json = estimationFile.readText()
+                    val localList = Json.decodeFromString<List<CalcEstimation>>(json)
+                    _estimations.update { current ->
+                        (current + localList).distinctBy { it.id ?: it.createdAt }.sortedByDescending { it.createdAt }
+                    }
+                    println("DEBUG_LOG: Loaded ${localList.size} estimations from local storage")
+                }
+            } catch (e: Exception) {
+                println("DEBUG_LOG: Error loading local estimations: ${e.message}")
+            }
+        }
+    }
+
+    private fun saveEstimationsToLocal(list: List<CalcEstimation>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val json = Json.encodeToString(list)
+                estimationFile.writeText(json)
+                println("DEBUG_LOG: Saved ${list.size} estimations to local storage")
+            } catch (e: Exception) {
+                println("DEBUG_LOG: Error saving local estimations: ${e.message}")
+            }
+        }
+    }
+
+    fun fetchEstimations() {
+        viewModelScope.launch {
+            try {
+                val result = SupabaseConfig.client.from("calc_estimations").select().decodeList<CalcEstimation>()
+                _estimations.update { current ->
+                    (current + result).distinctBy { it.id ?: it.createdAt }.sortedByDescending { it.createdAt }
+                }
+                saveEstimationsToLocal(_estimations.value)
+                println("DEBUG_LOG: Fetched ${result.size} estimations from DB")
+            } catch (e: Exception) {
+                println("DEBUG_LOG: Error fetching estimations: ${e.message}")
+            }
+        }
+    }
+
+    private fun fetchCalcLaborCategories() {
+        viewModelScope.launch {
+            try {
+                val result = SupabaseConfig.client.from("calc_labor_categories").select().decodeList<CalcLaborCategory>()
+                if (result.isEmpty()) {
+                    _calcLaborCategories.value = getFallbackLaborCategories()
+                } else {
+                    _calcLaborCategories.value = result.sortedBy { it.orderIndex }
+                }
+            } catch (e: Exception) {
+                println("Supabase CalcLaborCategories Error: ${e.message}")
+                _calcLaborCategories.value = getFallbackLaborCategories()
+            }
+        }
+    }
+
+    private fun getFallbackLaborCategories(): List<CalcLaborCategory> {
+        return listOf(
+            CalcLaborCategory("labor", "Tenaga Kerja", "Biaya harian tukang ahli dan pembantu", "Groups", 0, true),
+            CalcLaborCategory("preparation", "Persiapan", "Pembersihan lahan dan pembongkaran", "Construction", 1, false),
+            CalcLaborCategory("mep", "Listrik & Air", "Instalasi titik lampu dan pipa", "ElectricalServices", 2, false),
+            CalcLaborCategory("contingency", "Dana Darurat", "Biaya tak terduga (10% disarankan)", "ReportProblem", 3, true)
+        )
     }
 
     private fun fetchCalcCategories() {
@@ -331,8 +425,8 @@ class MainViewModel : ViewModel() {
 
     private fun getFallbackCalcVariables(): List<CalcVariable> {
         return listOf(
-            CalcVariable(id = "var_p", variableKey = "P", label = "Panjang", unit = "m", minValue = 0f, maxValue = 100f, step = 0.5f),
-            CalcVariable(id = "var_l", variableKey = "L", label = "Lebar", unit = "m", minValue = 0f, maxValue = 100f, step = 0.5f),
+            CalcVariable(id = "var_p", variableKey = "P", label = "Panjang", unit = "m", minValue = 0f, maxValue = 100f, step = 0.1f),
+            CalcVariable(id = "var_l", variableKey = "L", label = "Lebar", unit = "m", minValue = 0f, maxValue = 100f, step = 0.1f),
             CalcVariable(id = "var_t", variableKey = "T", label = "Tinggi", unit = "m", minValue = 0f, maxValue = 10f, step = 0.1f)
         )
     }
@@ -379,9 +473,41 @@ class MainViewModel : ViewModel() {
 
     private fun getFallbackCalcMaterials(): List<CalcMaterial> {
         return listOf(
-            CalcMaterial(id = "mat_granit", categoryId = "cat_lantai", name = "Granite 60x60", unitType = "m2", basePrice = 250000f),
-            CalcMaterial(id = "mat_cat_premium", categoryId = "cat_dinding", name = "Cat Premium", unitType = "m2", basePrice = 45000f),
-            CalcMaterial(id = "mat_gypsum", categoryId = "cat_plafon", name = "Gypsum Board 9mm", unitType = "m2", basePrice = 85000f)
+            // LANTAI (10 items)
+            CalcMaterial(id = "mat_l1", categoryId = "cat_lantai", surfaceType = "Lantai", name = "Granite 60x60 Premium", unitType = "m2", basePrice = 250000f),
+            CalcMaterial(id = "mat_l2", categoryId = "cat_lantai", surfaceType = "Lantai", name = "Granite 60x60 Standard", unitType = "m2", basePrice = 180000f),
+            CalcMaterial(id = "mat_l3", categoryId = "cat_lantai", surfaceType = "Lantai", name = "Keramik 40x40 Putih", unitType = "m2", basePrice = 85000f),
+            CalcMaterial(id = "mat_l4", categoryId = "cat_lantai", surfaceType = "Lantai", name = "Keramik 50x50 Motif", unitType = "m2", basePrice = 110000f),
+            CalcMaterial(id = "mat_l5", categoryId = "cat_lantai", surfaceType = "Lantai", name = "Parket Kayu Jati", unitType = "m2", basePrice = 450000f),
+            CalcMaterial(id = "mat_l6", categoryId = "cat_lantai", surfaceType = "Lantai", name = "Parket Kayu Oak", unitType = "m2", basePrice = 380000f),
+            CalcMaterial(id = "mat_l7", categoryId = "cat_lantai", surfaceType = "Lantai", name = "Vinyl Flooring 3mm", unitType = "m2", basePrice = 150000f),
+            CalcMaterial(id = "mat_l8", categoryId = "cat_lantai", surfaceType = "Lantai", name = "Vinyl Click System", unitType = "m2", basePrice = 220000f),
+            CalcMaterial(id = "mat_l9", categoryId = "cat_lantai", surfaceType = "Lantai", name = "Marmer Statuario", unitType = "m2", basePrice = 1200000f),
+            CalcMaterial(id = "mat_l10", categoryId = "cat_lantai", surfaceType = "Lantai", name = "Marmer Local Lampung", unitType = "m2", basePrice = 650000f),
+
+            // DINDING (10 items)
+            CalcMaterial(id = "mat_d1", categoryId = "cat_dinding", surfaceType = "Dinding", name = "Cat Interior Premium", unitType = "m2", basePrice = 45000f),
+            CalcMaterial(id = "mat_d2", categoryId = "cat_dinding", surfaceType = "Dinding", name = "Cat Interior Standard", unitType = "m2", basePrice = 25000f),
+            CalcMaterial(id = "mat_d3", categoryId = "cat_dinding", surfaceType = "Dinding", name = "Wallpaper Vinyl Motif", unitType = "m2", basePrice = 65000f),
+            CalcMaterial(id = "mat_d4", categoryId = "cat_dinding", surfaceType = "Dinding", name = "Wallpaper Foam 3D", unitType = "m2", basePrice = 35000f),
+            CalcMaterial(id = "mat_d5", categoryId = "cat_dinding", surfaceType = "Dinding", name = "Cat Eksterior Weatherproof", unitType = "m2", basePrice = 85000f),
+            CalcMaterial(id = "mat_d6", categoryId = "cat_dinding", surfaceType = "Dinding", name = "Batu Alam Candi", unitType = "m2", basePrice = 175000f),
+            CalcMaterial(id = "mat_d7", categoryId = "cat_dinding", surfaceType = "Dinding", name = "Batu Alam Palimanan", unitType = "m2", basePrice = 195000f),
+            CalcMaterial(id = "mat_d8", categoryId = "cat_dinding", surfaceType = "Dinding", name = "Wood Panel Wall", unitType = "m2", basePrice = 320000f),
+            CalcMaterial(id = "mat_d9", categoryId = "cat_dinding", surfaceType = "Dinding", name = "Keramik Dinding 25x40", unitType = "m2", basePrice = 95000f),
+            CalcMaterial(id = "mat_d10", categoryId = "cat_dinding", surfaceType = "Dinding", name = "WPC Wall Panel", unitType = "m2", basePrice = 145000f),
+
+            // PLAFON (10 items)
+            CalcMaterial(id = "mat_p1", categoryId = "cat_plafon", surfaceType = "Plafon", name = "Gypsum Board 9mm Elephant", unitType = "m2", basePrice = 85000f),
+            CalcMaterial(id = "mat_p2", categoryId = "cat_plafon", surfaceType = "Plafon", name = "Gypsum Board 9mm Knauf", unitType = "m2", basePrice = 82000f),
+            CalcMaterial(id = "mat_p3", categoryId = "cat_plafon", surfaceType = "Plafon", name = "Plafon PVC High Gloss", unitType = "m2", basePrice = 125000f),
+            CalcMaterial(id = "mat_p4", categoryId = "cat_plafon", surfaceType = "Plafon", name = "Plafon PVC Wood Grain", unitType = "m2", basePrice = 135000f),
+            CalcMaterial(id = "mat_p5", categoryId = "cat_plafon", surfaceType = "Plafon", name = "GRC Board 4mm", unitType = "m2", basePrice = 65000f),
+            CalcMaterial(id = "mat_p6", categoryId = "cat_plafon", surfaceType = "Plafon", name = "Plafon Akustik 60x60", unitType = "m2", basePrice = 155000f),
+            CalcMaterial(id = "mat_p7", categoryId = "cat_plafon", surfaceType = "Plafon", name = "List Gypsum Profil 10cm", unitType = "m", basePrice = 25000f),
+            CalcMaterial(id = "mat_p8", categoryId = "cat_plafon", surfaceType = "Plafon", name = "List PVC Modern", unitType = "m", basePrice = 35000f),
+            CalcMaterial(id = "mat_p9", categoryId = "cat_plafon", surfaceType = "Plafon", name = "Plafon Kayu Lambersering", unitType = "m2", basePrice = 275000f),
+            CalcMaterial(id = "mat_p10", categoryId = "cat_plafon", surfaceType = "Plafon", name = "Gypsum Water Resistant", unitType = "m2", basePrice = 115000f)
         )
     }
 
@@ -401,6 +527,33 @@ class MainViewModel : ViewModel() {
         }
     }
 
+    private fun fetchLaborConfigs() {
+        viewModelScope.launch {
+            try {
+                val result = SupabaseConfig.client.from("calc_labor_configs").select().decodeList<LaborConfig>()
+                if (result.isEmpty()) {
+                    _laborConfigs.value = getFallbackLaborConfigs()
+                } else {
+                    _laborConfigs.value = result
+                }
+            } catch (e: Exception) {
+                println("Supabase LaborConfigs Error: ${e.message}")
+                _laborConfigs.value = getFallbackLaborConfigs()
+            }
+        }
+    }
+
+    private fun getFallbackLaborConfigs(): List<LaborConfig> {
+        return listOf(
+            LaborConfig("l1", "labor", "daily_expert", "Tukang Ahli", "hari", 200000.0, "Tenaga ahli untuk finishing dan detail", false),
+            LaborConfig("l2", "labor", "daily_helper", "Kenek / Pembantu", "hari", 120000.0, "Membantu persiapan dan angkut material", false),
+            LaborConfig("p1", "preparation", "demolition", "Bongkar Pasangan Lama", "m2", 35000.0, "Membongkar lantai/dinding lama", true),
+            LaborConfig("p2", "preparation", "waste_disposal", "Buang Puing", "trip", 250000.0, "Sewa pickup untuk pembuangan limbah", false),
+            LaborConfig("m1", "mep", "light_point", "Titik Lampu", "titik", 150000.0, "Instalasi kabel dan fitting lampu", false),
+            LaborConfig("m2", "mep", "power_outlet", "Stopkontak", "titik", 175000.0, "Instalasi kabel dan box stopkontak", false)
+        )
+    }
+
     private fun getFallbackCalcFormulaVariables(): List<CalcFormulaVariable> {
         return listOf(
             CalcFormulaVariable(id = "fv1", formulaId = "form_lantai", variableId = "var_p", orderIndex = 0),
@@ -411,13 +564,56 @@ class MainViewModel : ViewModel() {
         )
     }
 
+    private fun getDefaultCalcSystemConfigs(): Map<String, CalcSystemConfig> {
+        return emptyMap()
+    }
+
     private fun fetchCalcSystemConfigs() {
         viewModelScope.launch {
             try {
                 val result = SupabaseConfig.client.from("calc_system_configs").select().decodeList<CalcSystemConfig>()
-                _calcSystemConfigs.value = result.associateBy { it.key }
+                val merged = getDefaultCalcSystemConfigs().toMutableMap()
+                result.forEach { merged[it.key] = it }
+                _calcSystemConfigs.value = merged
             } catch (e: Exception) {
                 println("Supabase CalcSystemConfigs Error: ${e.message}")
+            }
+        }
+    }
+
+    private val _saveStatus = MutableStateFlow<SaveStatus>(SaveStatus.Idle)
+    val saveStatus: StateFlow<SaveStatus> = _saveStatus.asStateFlow()
+
+    fun resetSaveStatus() {
+        _saveStatus.value = SaveStatus.Idle
+    }
+
+    fun saveEstimation(estimation: CalcEstimation) {
+        viewModelScope.launch {
+            _saveStatus.value = SaveStatus.Loading
+            
+            // Generate a local ID and timestamp if missing
+            val timestamp = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).format(java.util.Date())
+            val localEstimation = estimation.copy(
+                id = estimation.id ?: java.util.UUID.randomUUID().toString(),
+                createdAt = estimation.createdAt ?: timestamp
+            )
+
+            // Save locally first for offline availability
+            _estimations.update { current ->
+                (current + localEstimation).distinctBy { it.id }.sortedByDescending { it.createdAt }
+            }
+            saveEstimationsToLocal(_estimations.value)
+
+            try {
+                SupabaseConfig.client.from("calc_estimations").insert(localEstimation)
+                println("DEBUG_LOG: Estimation saved to DB")
+                _saveStatus.value = SaveStatus.Success("Estimasi berhasil disimpan!")
+                fetchEstimations() // Sync with DB
+            } catch (e: Exception) {
+                println("DEBUG_LOG: DB Save failed, keeping local: ${e.message}")
+                // Still show success because it's saved locally
+                _saveStatus.value = SaveStatus.Success("Estimasi disimpan di perangkat (Offline)")
             }
         }
     }

@@ -1,7 +1,9 @@
 package com.example.renovasritv
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
@@ -122,20 +124,41 @@ fun String?.toFontSize(screenWidthDp: Int): TextUnit {
 }
 
 /**
+ * Converts a design token or raw numeric string into a [Dp] value for icons/images.
+ * Scaled 5.25x (an additional 75% increase over the previous 3x scale) for high brand visibility on TV.
+ */
+fun String?.toIconSize(): Dp {
+    val token = this?.split(" ")?.get(0)?.lowercase()
+    val baseSize = when (token) {
+        "caption" -> 12.dp
+        "body" -> 16.dp
+        "subtitle" -> 20.dp
+        "title" -> 24.dp
+        "headline" -> 36.dp
+        "display" -> 48.dp
+        else -> {
+            this?.filter { it.isDigit() || it == '.' }?.toFloatOrNull()?.dp ?: 24.dp
+        }
+    }
+    return baseSize * 5.25f
+}
+
+/**
  * Cascading Visibility Engine Helper.
  * Ensures that if a Parent (Area/Container) is inactive or missing, all children are hidden.
  */
 fun Map<String, UIConfig>.isModuleVisible(key: String): Boolean {
     val config = this[key] 
     
-    // If the key is not found in the map (e.g., disabled/removed from DB):
-    // Structural areas (AREA_/CONTAINER_) MUST default to FALSE (Hidden).
+    // Fallback: If a key is NOT in the database:
+    // We allow it to be visible by default so features don't break if not configured.
+    // EXCEPT for structural areas or specifically prefixed keys that MUST be in DB.
     if (config == null) {
         val isStructural = key.startsWith("AREA_") || key.startsWith("CONTAINER_")
         return !isStructural
     }
     
-    // If explicitly marked inactive in the database, hide it.
+    // If explicitly found in the database and marked inactive, hide it.
     if (!config.isActive) return false
     
     // Recursive check for Parent visibility.
@@ -174,6 +197,42 @@ fun String?.toOverlayOpacity(): Float {
 // --- CALCULATION ENGINE MODELS (FASE 1) ---
 
 @Serializable
+data class LaborConfig(
+    val id: String,
+    val category: String, // labor, preparation, mep
+    @SerialName("item_key") val itemKey: String,
+    val name: String,
+    val unit: String,
+    @SerialName("default_price") val defaultPrice: Double,
+    val description: String? = null,
+    @SerialName("is_borongan") val isBorongan: Boolean = false
+)
+
+@Serializable
+data class LaborGroupState(
+    val key: String,
+    @SerialName("is_active") val isActive: Boolean = true,
+    val overrides: Map<String, Double> = emptyMap(), // Overridden unit prices
+    val quantities: Map<String, Float> = emptyMap() // Number of units (days, points, etc)
+)
+
+@Serializable
+data class MaterialCoverage(
+    val material: CalcMaterial,
+    @SerialName("coverage_percentage") var coveragePercentage: Float = 0f
+)
+
+@Serializable
+data class SurfaceData(
+    @SerialName("category_id") val categoryId: String,
+    val name: String,
+    val formula: String,
+    val area: Double = 0.0,
+    @SerialName("material_count") val materialCount: Int = 1,
+    @SerialName("selected_materials") val selectedMaterials: List<MaterialCoverage?> = emptyList()
+)
+
+@Serializable
 data class CalcCategory(
     val id: String,
     @SerialName("parent_id") val parentId: String? = null,
@@ -181,7 +240,8 @@ data class CalcCategory(
     val description: String? = null,
     @SerialName("icon_url") val iconUrl: String? = null,
     @SerialName("order_index") val orderIndex: Int = 0,
-    @SerialName("is_calculable") val isCalculable: Boolean = false
+    @SerialName("is_calculable") val isCalculable: Boolean = false,
+    @SerialName("material_count") val materialCount: Int = 1
 )
 
 @Serializable
@@ -209,14 +269,17 @@ data class CalcFormula(
 data class CalcMaterial(
     val id: String,
     @SerialName("category_id") val categoryId: String,
+    @SerialName("surface_type") val surfaceType: String? = null,
     val name: String,
     val description: String? = null,
     @SerialName("unit_type") val unitType: String,
     @SerialName("coverage_per_unit") val coveragePerUnit: Float = 1.0f,
     @SerialName("base_price") val basePrice: Float = 0f,
     @SerialName("waste_factor") val wasteFactor: Float = 1.05f,
+    @SerialName("price_min_factor") val priceMinFactor: Float = 0.75f,
+    @SerialName("price_max_factor") val priceMaxFactor: Float = 1.25f,
     @SerialName("image_url") val imageUrl: String? = null,
-    @SerialName("is_active") val isActive: Boolean = true // Added from assessment
+    @SerialName("is_active") val isActive: Boolean = true
 )
 
 @Serializable
@@ -228,10 +291,23 @@ data class CalcFormulaVariable(
 )
 
 @Serializable
+data class CalcLaborCategory(
+    val key: String, // 'labor', 'preparation', 'mep', 'contingency'
+    val label: String,
+    val description: String? = null,
+    @SerialName("icon_name") val iconName: String? = null,
+    @SerialName("order_index") val orderIndex: Int = 0,
+    @SerialName("is_active_default") val isActiveDefault: Boolean = true
+)
+
+@Serializable
 data class CalcSystemConfig(
     val key: String,
     val value: String,
-    val description: String? = null
+    val description: String? = null,
+    @SerialName("is_visible") val isVisible: Boolean = false,
+    @SerialName("label_display") val labelDisplay: String? = null,
+    @SerialName("config_type") val configType: String = "factor" // factor or fixed
 )
 
 // --- CALCULATION SNAPSHOT MODELS (FASE 4) ---
@@ -247,5 +323,24 @@ data class CalcSnapshot(
     @SerialName("currency_code") val currencyCode: String = "IDR",
     val inputs: Map<String, Float> // Storing the variables used (P, L, T etc)
 )
+
+@Serializable
+data class CalcEstimation(
+    val id: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("total_min") val totalMin: Double,
+    @SerialName("total_max") val totalMax: Double,
+    @SerialName("room_dimensions") val roomDimensions: String, // JSON
+    @SerialName("surfaces_json") val surfacesJson: String, // JSON
+    @SerialName("labor_json") val laborJson: String, // JSON
+    val status: String = "draft"
+)
+
+sealed class SaveStatus {
+    object Idle : SaveStatus()
+    object Loading : SaveStatus()
+    data class Success(val message: String) : SaveStatus()
+    data class Error(val message: String) : SaveStatus()
+}
 
 

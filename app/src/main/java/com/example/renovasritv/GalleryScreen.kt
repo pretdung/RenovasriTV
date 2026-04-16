@@ -93,31 +93,11 @@ fun GalleryScreen(navController: NavController, viewModel: MainViewModel) {
             val keyboardController = LocalSoftwareKeyboardController.current
             val focusRequester = remember { FocusRequester() }
 
-            val speechRecognizerLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.StartActivityForResult()
-            ) { result ->
-                if (result.resultCode == Activity.RESULT_OK) {
-                    val spokenText = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.get(0)
-                    if (!spokenText.isNullOrEmpty()) {
-                        searchQuery = spokenText
-                        selectedFilter = "All"
-                    }
-                }
-            }
-
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // Voice Search Button
                 Surface(
                     onClick = {
-                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                            putExtra(RecognizerIntent.EXTRA_PROMPT, "Search collections...")
-                        }
-                        try {
-                            speechRecognizerLauncher.launch(intent)
-                        } catch (e: Exception) {
-                            // Ignore if not supported
-                        }
+                        /* Voice search logic removed to simplify focus */
                     },
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color(0x33333537),

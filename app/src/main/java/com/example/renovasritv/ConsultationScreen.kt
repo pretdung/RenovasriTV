@@ -29,7 +29,6 @@ fun ConsultationScreen(navController: NavController, viewModel: MainViewModel) {
     val descConfig = uiConfigs["consultation_description"]
     val qrConfig = uiConfigs["consultation_qr_image"]
     val contactConfig = uiConfigs["consultation_contact_info"]
-    val bannerConfig = uiConfigs["consultation_banner_image"]
 
     val title = titleConfig?.value ?: "Wujudkan Hunian Impian Anda"
     val description = descConfig?.value ?: "Konsultasikan kebutuhan desain dan renovasi Anda langsung dengan tim ahli kami melalui WhatsApp."
@@ -37,16 +36,7 @@ fun ConsultationScreen(navController: NavController, viewModel: MainViewModel) {
     val contactInfo = contactConfig?.value ?: "+62 812-3456-7890"
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Background Banner (Optional CMS Driven)
-        if (bannerConfig?.isActive != false && bannerConfig?.value != null) {
-            AsyncImage(
-                model = bannerConfig.value,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-                alpha = 0.1f
-            )
-        }
+        // Background Banner removed as it is handled globally by MainActivity
 
         Row(
             modifier = Modifier
@@ -126,14 +116,14 @@ fun ConsultationScreen(navController: NavController, viewModel: MainViewModel) {
                 
                 Text(
                     text = "SCAN UNTUK KONSULTASI",
-                    color = MaterialTheme.colorScheme.primary,
+                    color = qrConfig?.fontColor?.toComposeColor() ?: MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 2.sp,
                     fontSize = 16.sp
                 )
                 Text(
-                    text = "Gunakan kamera ponsel Anda",
-                    color = Color.Gray,
+                    text = uiConfigs["consultation_qr_subtitle"]?.value ?: "Gunakan kamera ponsel Anda",
+                    color = uiConfigs["consultation_qr_subtitle"]?.fontColor?.toComposeColor() ?: Color.Gray,
                     fontSize = 14.sp
                 )
             }

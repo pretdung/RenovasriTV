@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -21,7 +22,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.tv.material3.*
+import java.util.Locale
 import coil.compose.AsyncImage
 
 @Composable
@@ -89,6 +93,10 @@ fun SidebarIcon(
     selected: Boolean,
     onClick: () -> Unit
 ) {
+    var isFocused by remember { mutableStateOf(false) }
+    // Scale up if focused OR if this is the currently active page (selected)
+    val iconSize = if (isFocused || selected) 42.dp else 21.dp
+
     Surface(
         onClick = onClick,
         colors = ClickableSurfaceDefaults.colors(
@@ -96,7 +104,9 @@ fun SidebarIcon(
             focusedContainerColor = Color(0x22FFFFFF)
         ),
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
-        modifier = Modifier.size(56.dp)
+        modifier = Modifier
+            .size(56.dp)
+            .onFocusChanged { isFocused = it.isFocused }
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             if (selected) {
@@ -119,22 +129,22 @@ fun SidebarIcon(
                             imageVector = materialIcon,
                             contentDescription = null,
                             tint = iconColor,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(iconSize)
                         )
                     } else if (source.startsWith("http")) {
                         AsyncImage(
                             model = source,
                             contentDescription = null,
-                            modifier = Modifier.size(28.dp),
+                            modifier = Modifier.size(iconSize),
                             colorFilter = if (iconType == "image") null else androidx.compose.ui.graphics.ColorFilter.tint(iconColor),
-                            contentScale = if (iconType == "image") ContentScale.Crop else ContentScale.Fit
+                            contentScale = ContentScale.Fit
                         )
                     } else {
                         Icon(
                             imageVector = defaultIcon,
                             contentDescription = null,
                             tint = iconColor,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(iconSize)
                         )
                     }
                 }
@@ -143,7 +153,7 @@ fun SidebarIcon(
                         imageVector = source,
                         contentDescription = null,
                         tint = iconColor,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(iconSize)
                     )
                 }
                 else -> {
@@ -151,7 +161,7 @@ fun SidebarIcon(
                         imageVector = defaultIcon,
                         contentDescription = null,
                         tint = iconColor,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(iconSize)
                     )
                 }
             }
@@ -327,6 +337,117 @@ fun FilterChip(text: String, selected: Boolean, onClick: () -> Unit) {
             fontSize = 16.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
         )
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun NumericStepper(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String? = null,
+    unit: String = "",
+    step: Float = 0.1f,
+    min: Float = 0f,
+    max: Float = 100f,
+    labelConfig: UIConfig? = null,
+    valueConfig: UIConfig? = null,
+    enabled: Boolean = true,
+    containerColor: Color = Color.White,
+    firstButtonFocusRequester: androidx.compose.ui.focus.FocusRequester? = null
+) {
+    val screenWidth = LocalConfiguration.current.screenWidthDp
+    
+    val contentColor = Color.Black
+    val focusedContainerColor = MaterialTheme.colorScheme.primary
+    val focusedContentColor = Color.White
+
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (label != null && label.isNotEmpty()) {
+            Text(
+                text = label,
+                color = Color.Black,
+                fontSize = labelConfig?.fontSize.toFontSize(screenWidth),
+                fontWeight = labelConfig?.fontWeight.toFontWeight() ?: FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
+        
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .background(containerColor, RoundedCornerShape(12.dp))
+                .padding(4.dp)
+        ) {
+            // Button Minus
+            Surface(
+                onClick = { 
+                    val newValue = (value - step).coerceAtLeast(min)
+                    onValueChange(String.format(Locale.US, "%.1f", newValue).toFloat())
+                },
+                enabled = enabled && value > min,
+                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Color.Transparent,
+                    contentColor = contentColor,
+                    focusedContainerColor = focusedContainerColor,
+                    focusedContentColor = focusedContentColor,
+                    disabledContainerColor = Color.Transparent,
+                    disabledContentColor = Color.Gray
+                ),
+                modifier = Modifier
+                    .size(48.dp)
+                    .then(if (firstButtonFocusRequester != null) Modifier.focusRequester(firstButtonFocusRequester) else Modifier)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Remove, contentDescription = "Decrease", modifier = Modifier.size(24.dp))
+                }
+            }
+
+            // Value Display
+            Box(
+                modifier = Modifier
+                    .width(120.dp)
+                    .padding(horizontal = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "${String.format(Locale.US, if (step >= 1f) "%.0f" else "%.1f", value)}${if (unit.isNotEmpty()) " $unit" else ""}",
+                    color = Color.Black,
+                    fontSize = valueConfig?.fontSize.toFontSize(screenWidth).takeIf { it != 0.sp } ?: 18.sp,
+                    fontWeight = valueConfig?.fontWeight.toFontWeight() ?: FontWeight.Black,
+                    maxLines = 1
+                )
+            }
+
+            // Button Plus
+            Surface(
+                onClick = { 
+                    val newValue = (value + step).coerceAtMost(max)
+                    onValueChange(String.format(Locale.US, "%.1f", newValue).toFloat())
+                },
+                enabled = enabled && value < max,
+                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Color.Transparent,
+                    contentColor = contentColor,
+                    focusedContainerColor = focusedContainerColor,
+                    focusedContentColor = focusedContentColor,
+                    disabledContainerColor = Color.Transparent,
+                    disabledContentColor = Color.Gray
+                ),
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Add, contentDescription = "Increase", modifier = Modifier.size(24.dp))
+                }
+            }
+        }
     }
 }
 

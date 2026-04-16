@@ -38,6 +38,7 @@ sealed class Screen(val route: String) {
     object Favorites : Screen("favorites")
     object Consultation : Screen("consultation")
     object Calculator : Screen("calculator")
+    object History : Screen("history")
     object Detail : Screen("detail/{id}?initialImage={initialImage}") {
         fun createRoute(id: String, initialImage: String? = null) = 
             if (initialImage != null) "detail/$id?initialImage=${java.net.URLEncoder.encode(initialImage, "UTF-8")}"
@@ -82,27 +83,33 @@ class MainActivity : ComponentActivity() {
 fun TvApp() {
     val navController = rememberNavController()
     val viewModel: MainViewModel = viewModel()
+    val calcViewModel: CalculatorViewModel = viewModel()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val menuBackgrounds by viewModel.menuBackgrounds.collectAsState()
+    val uiConfigs by viewModel.uiConfigs.collectAsState()
     val themeMap by viewModel.appTheme.collectAsState()
 
     // Map null route to Home to ensure we always have a config if possible
     val effectiveRoute = currentRoute ?: Screen.Home.route
 
     // 1. Try to find background from the Theme system (theme_colors table)
-    // Keys used: bg_home, bg_gallery, bg_favorites, bg_consultation, bg_detail
     val baseRoute = effectiveRoute.substringBefore("/")
     val themeBgKey = "bg_$baseRoute"
-    val themeBgUrl = themeMap[themeBgKey]?.colorHex
+    val themeBgUrl = themeMap[themeBgKey]?.colorHex?.takeIf { it.isNotBlank() && it.startsWith("http") }
 
-    // 2. Fallback to global menu_backgrounds if not in theme
+    // 2. Try to find background from UI Configs (Page specific banners like consultation_banner_image)
+    val uiConfigBg = uiConfigs["${baseRoute}_banner_image"]?.value?.takeIf { it.isNotBlank() && it.startsWith("http") }
+
+    // 3. Fallback to global menu_backgrounds
     val currentConfig = remember(effectiveRoute, menuBackgrounds) {
         menuBackgrounds.find { it.menuKey == effectiveRoute || it.menuKey == baseRoute }
     }
+    val menuBgUrl = currentConfig?.imageUrl?.takeIf { it.isNotBlank() && it.startsWith("http") }
 
     val backgroundImage = themeBgUrl 
-        ?: currentConfig?.imageUrl
+        ?: uiConfigBg
+        ?: menuBgUrl
         ?: "https://xbeslcqosyhyuyxztpov.supabase.co/storage/v1/object/public/media/renovasri-export-1771905706286.jpg"
     
     // Ensure background is always visible with a higher minimum alpha
@@ -183,7 +190,12 @@ fun TvApp() {
                 }
                 composable(Screen.Calculator.route) {
                     RouteGuard(pageKey = "page_calculator", viewModel = viewModel) {
-                        CalculatorWizardScreen(mainViewModel = viewModel)
+                        CalculatorWizardScreen(mainViewModel = viewModel, calcViewModel = calcViewModel)
+                    }
+                }
+                composable(Screen.History.route) {
+                    RouteGuard(pageKey = "page_history", viewModel = viewModel) {
+                        HistoryScreen(navController = navController, viewModel = viewModel, calcViewModel = calcViewModel)
                     }
                 }
                 composable(
@@ -233,6 +245,9 @@ fun SideNavigation(navController: NavController, viewModel: MainViewModel) {
     val logoConfig = uiConfigs["sidebar_logo_text"]
     val logoValue = logoConfig?.value ?: "TC"
     val logoType = logoConfig?.type ?: "text"
+    
+    // Configurable logo size (from fontSize or description)
+    val logoSize = logoConfig?.fontSize.toIconSize()
 
     Column(
         modifier = Modifier
@@ -244,7 +259,7 @@ fun SideNavigation(navController: NavController, viewModel: MainViewModel) {
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(top = 32.dp)
+            modifier = Modifier.padding(top = 0.dp)
         ) {
             // Logo Rendering (Modular)
             if (viewModel.isModuleVisible("sidebar_logo_text")) {
@@ -252,10 +267,12 @@ fun SideNavigation(navController: NavController, viewModel: MainViewModel) {
                     AsyncImage(
                         model = logoValue,
                         contentDescription = "Logo",
-                        modifier = Modifier.size(48.dp).padding(bottom = 16.dp),
+                        modifier = Modifier
+                            .size(logoSize)
+                            .padding(bottom = 8.dp),
                         contentScale = ContentScale.Fit
                     )
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.height(0.dp))
                 } else {
                     Text(
                         text = logoValue,
@@ -263,7 +280,7 @@ fun SideNavigation(navController: NavController, viewModel: MainViewModel) {
                         fontWeight = logoConfig?.fontWeight.toFontWeight(),
                         fontSize = logoConfig?.fontSize.toFontSize(screenWidth),
                         fontStyle = if (logoConfig?.fontStyle == "italic") FontStyle.Italic else FontStyle.Normal,
-                        modifier = Modifier.padding(bottom = 48.dp),
+                        modifier = Modifier.padding(bottom = 24.dp),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -289,12 +306,12 @@ fun SideNavigation(navController: NavController, viewModel: MainViewModel) {
                         }
                     }
                 )
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(4.dp)) // Ultra-compact icon spacing
             }
         }
 
         // Profile Section (Modular)
-        if (viewModel.isModuleVisible("sidebar_profile_group")) {
+        if (viewModel.isModuleVisible("sidebar_profile_image")) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(bottom = 32.dp)
