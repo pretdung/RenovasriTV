@@ -1,5 +1,7 @@
 package com.example.renovasritv
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -24,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.*
 import java.util.Locale
 import coil.compose.AsyncImage
@@ -445,6 +448,174 @@ fun NumericStepper(
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.Add, contentDescription = "Increase", modifier = Modifier.size(24.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SidebarItem(
+    label: String,
+    iconSource: Any?,
+    selected: Boolean,
+    isExpanded: Boolean,
+    isFocusedExternal: Boolean = false,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val effectiveFocused = isFocused || isFocusedExternal
+    
+    Surface(
+        onClick = onClick,
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.Transparent,
+            focusedContainerColor = Color.White.copy(alpha = 0.1f),
+            pressedContainerColor = Color.White.copy(alpha = 0.2f)
+        ),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .onFocusChanged { isFocused = it.isFocused }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (isExpanded) Arrangement.Start else Arrangement.Center
+        ) {
+            // Selection Indicator
+            if (selected && !isExpanded) {
+                Box(
+                    modifier = Modifier
+                        .size(4.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        .align(Alignment.CenterVertically)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+
+            // Icon
+            val iconColor = if (selected || isFocused) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f)
+            val iconSize by animateDpAsState(if (isFocused) 32.dp else 24.dp, label = "IconSize")
+
+            Box(modifier = Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+                when (val source = iconSource) {
+                    is String -> {
+                        val materialIcon = getIconByName(source)
+                        if (materialIcon != null) {
+                            Icon(materialIcon, null, tint = iconColor, modifier = Modifier.size(iconSize))
+                        } else {
+                            AsyncImage(
+                                model = source,
+                                contentDescription = null,
+                                modifier = Modifier.size(iconSize),
+                                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(iconColor)
+                            )
+                        }
+                    }
+                    else -> Icon(Icons.Default.Circle, null, tint = iconColor, modifier = Modifier.size(iconSize))
+                }
+            }
+
+            if (isExpanded) {
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(
+                    text = label,
+                    color = if (selected || isFocused) Color.White else Color.White.copy(alpha = 0.6f),
+                    fontSize = 16.sp,
+                    fontWeight = if (selected || isFocused) FontWeight.Bold else FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ProfileNode(
+    isExpanded: Boolean,
+    viewModel: MainViewModel,
+    navController: NavController,
+    authViewModel: AuthViewModel
+) {
+    val uiConfigs by viewModel.uiConfigs.collectAsState()
+    val authState by authViewModel.authState.collectAsState()
+    
+    Surface(
+        onClick = { 
+            if (authState is AuthState.Authenticated) {
+                // Future: Show profile/settings or logout confirmation
+                authViewModel.signOut()
+            } else {
+                navController.navigate("auth") 
+            }
+        },
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.Transparent,
+            focusedContainerColor = Color.White.copy(alpha = 0.1f)
+        ),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 24.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (isExpanded) Arrangement.Start else Arrangement.Center
+        ) {
+            val (displayName, subText, avatarUrl) = when (val state = authState) {
+                is AuthState.Authenticated -> {
+                    Triple(
+                        state.email?.substringBefore("@") ?: "User",
+                        state.email ?: "Signed In",
+                        state.avatarUrl ?: uiConfigs["sidebar_profile_image"]?.value
+                    )
+                }
+                else -> {
+                    Triple(
+                        "Guest User",
+                        "Sign In to Sync",
+                        uiConfigs["sidebar_profile_image"]?.value
+                    )
+                }
+            }
+
+            val finalAvatarUrl = avatarUrl ?: "https://lh3.googleusercontent.com/aida-public/AB6AXuB-3-KdaXozzaFiu9TcFSGrrWTMpGyp5HghXlbyWPPxCzP8tyXAQQbkcK-a5bRLAJjNi01A_GhAvtmSbWaY7Q5SCHYHVcYgZ_2ZfS-dPgXBshy2skkcRkLhYOcKiopNYkWgvo1Zz_L3KSIobPIQ4Zc1jrql1XS9cJsBtCbPkoavZzWu-kbqQb0O2XdHkRPcMnpz7QhWY-gam4TMyC-o3nR0ALlJs8frfzLCbLsUf4SpKAIAhape1k95h8eAro8B9LAioJb8E-mKH0c2"
+            
+            Surface(
+                shape = CircleShape,
+                modifier = Modifier.size(40.dp)
+            ) {
+                AsyncImage(
+                    model = finalAvatarUrl,
+                    contentDescription = "Profile",
+                    contentScale = ContentScale.Crop
+                )
+            }
+
+            if (isExpanded) {
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        displayName,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        subText,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }

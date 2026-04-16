@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.tv.material3.*
 import java.util.*
 
@@ -35,6 +36,7 @@ import java.util.*
 @Composable
 fun CalculatorWizardScreen(
     mainViewModel: MainViewModel,
+    navController: androidx.navigation.NavController,
     calcViewModel: CalculatorViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -45,6 +47,7 @@ fun CalculatorWizardScreen(
             is SaveStatus.Success -> {
                 Toast.makeText(context, status.message, Toast.LENGTH_SHORT).show()
                 mainViewModel.resetSaveStatus()
+                navController.navigate(Screen.AiResult.route)
             }
             is SaveStatus.Error -> {
                 Toast.makeText(context, status.message, Toast.LENGTH_LONG).show()
@@ -55,6 +58,28 @@ fun CalculatorWizardScreen(
     }
 
     val currentStep by calcViewModel.currentStep.collectAsState()
+
+    // Overlay Loading if saving
+    if (saveStatus is SaveStatus.Loading) {
+        Dialog(onDismissRequest = {}) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.7f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator()
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        (saveStatus as SaveStatus.Loading).message,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
     val uiConfigs by mainViewModel.uiConfigs.collectAsState()
     val laborConfigs by mainViewModel.laborConfigs.collectAsState()
     val laborCategories by mainViewModel.calcLaborCategories.collectAsState()
@@ -669,9 +694,10 @@ fun SummaryStep(
 ) {
     val surfaces by calcViewModel.surfaces.collectAsState()
     val systemConfigs by mainViewModel.calcSystemConfigs.collectAsState()
+    val laborConfigs by mainViewModel.laborConfigs.collectAsState()
 
-    val estimationTotals = remember(surfaces, systemConfigs) {
-        calcViewModel.calculateTotalEstimationDetailed(systemConfigs)
+    val estimationTotals = remember(surfaces, systemConfigs, laborConfigs) {
+        calcViewModel.calculateTotalEstimationDetailed(systemConfigs, laborConfigs)
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -875,7 +901,10 @@ fun WizardFooter(
             if (currentStep is WizardStep.EstimationSummary) {
                 Button(
                     onClick = {
-                        val estimation = calcViewModel.generateEstimation(mainViewModel.calcSystemConfigs.value)
+                        val estimation = calcViewModel.generateEstimation(
+                            mainViewModel.calcSystemConfigs.value,
+                            mainViewModel.laborConfigs.value
+                        )
                         mainViewModel.saveEstimation(estimation)
                     },
                     modifier = Modifier.focusRequester(nextButtonFocusRequester),

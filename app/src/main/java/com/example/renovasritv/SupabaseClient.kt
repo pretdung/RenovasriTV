@@ -1,5 +1,6 @@
 package com.example.renovasritv
 
+import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.realtime.Realtime
@@ -22,6 +23,7 @@ object SupabaseConfig {
             coerceInputValues = true
         })
         install(Postgrest)
+        install(Auth)
         install(Realtime)
         install(Storage)
     }

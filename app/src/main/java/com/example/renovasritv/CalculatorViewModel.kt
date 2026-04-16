@@ -243,10 +243,9 @@ class CalculatorViewModel : ViewModel() {
     }
 
     fun calculateTotalEstimationDetailed(
-        systemConfigs: Map<String, CalcSystemConfig>
+        systemConfigs: Map<String, CalcSystemConfig>,
+        laborConfigs: List<LaborConfig> = emptyList()
     ): Map<String, Double> {
-        val laborConfigs = (this as? CalculatorViewModel)?.let { emptyList<LaborConfig>() } // Placeholder for scope, but we use _laborGroups
-        
         var materialMinTotal = 0.0
         var materialMaxTotal = 0.0
         
@@ -267,11 +266,8 @@ class CalculatorViewModel : ViewModel() {
             if (state.isActive && catKey != "contingency") {
                 var groupSum = 0.0
                 state.quantities.forEach { (itemKey, qty) ->
-                    // Since we don't have direct access to LaborConfig list here without passing it, 
-                    // we'll assume the prices are already in overrides or handled.
-                    // For more accuracy, we should really pass laborConfigs list to this function.
-                    // But for now, let's use a simplified version or assume overrides contain the price.
-                    val unitPrice = state.overrides[itemKey] ?: 0.0 
+                    val config = laborConfigs.find { it.itemKey == itemKey }
+                    val unitPrice = state.overrides[itemKey] ?: config?.defaultPrice ?: 0.0
                     groupSum += qty.toDouble() * unitPrice
                 }
                 if (catKey == "labor") laborTotal = groupSum
@@ -321,14 +317,17 @@ class CalculatorViewModel : ViewModel() {
         mainViewModel.saveEstimation(estimation)
     }
 
-    fun generateEstimation(systemConfigs: Map<String, CalcSystemConfig> = emptyMap()): CalcEstimation {
+    fun generateEstimation(
+        systemConfigs: Map<String, CalcSystemConfig> = emptyMap(),
+        laborConfigs: List<LaborConfig> = emptyList()
+    ): CalcEstimation {
         // Prepare JSON snapshots of the current state
         val roomDimensionsJson = Json.encodeToString(inputValues.toMap())
         val surfacesJson = Json.encodeToString(_surfaces.value)
         val laborJson = Json.encodeToString(_laborGroups.value)
 
         // Calculate totals using existing detailed logic
-        val totals = calculateTotalEstimationDetailed(systemConfigs)
+        val totals = calculateTotalEstimationDetailed(systemConfigs, laborConfigs)
         
         return CalcEstimation(
             totalMin = totals["grandTotalMin"] ?: 0.0,

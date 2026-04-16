@@ -117,7 +117,38 @@ fun HeroSection(navController: NavController, uiConfigs: Map<String, UIConfig> =
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
-        Spacer(modifier = Modifier.height(12.dp)) // Reduced from 24.dp
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Row(
+            modifier = Modifier.padding(bottom = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Button(
+                onClick = { navController.navigate(Screen.Calculator.route) },
+                colors = ButtonDefaults.colors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = Color.Black
+                ),
+                shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(primaryButtonLabel, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Button(
+                onClick = { navController.navigate(Screen.Gallery.route) },
+                colors = ButtonDefaults.colors(
+                    containerColor = Color.White.copy(alpha = 0.1f),
+                    contentColor = Color.White
+                ),
+                shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
+            ) {
+                Text(secondaryButtonLabel)
+            }
+        }
 
         // Scrollable Description with D-Pad Support and Scrollbar
         val canScroll = scrollState.maxValue > 0

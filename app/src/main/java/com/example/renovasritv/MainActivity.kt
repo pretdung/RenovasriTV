@@ -3,24 +3,20 @@ package com.example.renovasritv
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -39,6 +35,9 @@ sealed class Screen(val route: String) {
     object Consultation : Screen("consultation")
     object Calculator : Screen("calculator")
     object History : Screen("history")
+    object Auth : Screen("auth")
+    object Settings : Screen("settings")
+    object AiResult : Screen("ai_result")
     object Detail : Screen("detail/{id}?initialImage={initialImage}") {
         fun createRoute(id: String, initialImage: String? = null) = 
             if (initialImage != null) "detail/$id?initialImage=${java.net.URLEncoder.encode(initialImage, "UTF-8")}"
@@ -84,6 +83,7 @@ fun TvApp() {
     val navController = rememberNavController()
     val viewModel: MainViewModel = viewModel()
     val calcViewModel: CalculatorViewModel = viewModel()
+    val authViewModel: AuthViewModel = viewModel()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val menuBackgrounds by viewModel.menuBackgrounds.collectAsState()
@@ -162,7 +162,7 @@ fun TvApp() {
 
         Row(modifier = Modifier.fillMaxSize()) {
             if (currentRoute != Screen.Detail.route) {
-                SideNavigation(navController, viewModel)
+                SideNavigation(navController, viewModel, authViewModel)
             }
             
             NavHost(
@@ -190,13 +190,26 @@ fun TvApp() {
                 }
                 composable(Screen.Calculator.route) {
                     RouteGuard(pageKey = "page_calculator", viewModel = viewModel) {
-                        CalculatorWizardScreen(mainViewModel = viewModel, calcViewModel = calcViewModel)
+                        CalculatorWizardScreen(mainViewModel = viewModel, navController = navController, calcViewModel = calcViewModel)
                     }
                 }
                 composable(Screen.History.route) {
                     RouteGuard(pageKey = "page_history", viewModel = viewModel) {
                         HistoryScreen(navController = navController, viewModel = viewModel, calcViewModel = calcViewModel)
                     }
+                }
+                composable(Screen.Auth.route) {
+                    AuthScreen(onAuthSuccess = {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.Auth.route) { inclusive = true }
+                        }
+                    })
+                }
+                composable(Screen.Settings.route) {
+                    ProviderConfigScreen(viewModel = viewModel)
+                }
+                composable(Screen.AiResult.route) {
+                    AiResultScreen(navController = navController, viewModel = viewModel, calcViewModel = calcViewModel)
                 }
                 composable(
                     route = Screen.Detail.route,
@@ -220,83 +233,83 @@ fun TvApp() {
 
 
 @Composable
-fun SideNavigation(navController: NavController, viewModel: MainViewModel) {
+fun SideNavigation(navController: NavController, viewModel: MainViewModel, authViewModel: AuthViewModel) {
     val uiConfigs by viewModel.uiConfigs.collectAsState()
     val uiModules by viewModel.uiModules.collectAsState()
     val themeMap by viewModel.appTheme.collectAsState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-    val screenWidth = LocalConfiguration.current.screenWidthDp
     
-    // Separate color and transparency logic
+    var isExpanded by remember { mutableStateOf(false) }
+    val sidebarWidth by animateDpAsState(
+        targetValue = if (isExpanded) 280.dp else 100.dp,
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label = "SidebarWidth"
+    )
+
     val sidebarColor = themeMap["sidebar_background"]?.colorHex?.toComposeColor() 
         ?: themeMap["surface"]?.colorHex?.toComposeColor() 
         ?: MaterialTheme.colorScheme.surface
 
     val transparencyRaw = themeMap["sidebar_transparency"]?.colorHex
-    val sidebarAlpha = transparencyRaw?.toFloatOrNull() ?: 0.6f
-
+    val sidebarAlpha = transparencyRaw?.toFloatOrNull() ?: 0.7f
     val sidebarBg = sidebarColor.copy(alpha = sidebarAlpha)
 
     val activeModules = remember(uiModules) {
         uiModules.filter { it.isActive }.sortedBy { it.orderIndex }
     }
 
-    val logoConfig = uiConfigs["sidebar_logo_text"]
-    val logoValue = logoConfig?.value ?: "TC"
-    val logoType = logoConfig?.type ?: "text"
-    
-    // Configurable logo size (from fontSize or description)
-    val logoSize = logoConfig?.fontSize.toIconSize()
-
     Column(
         modifier = Modifier
             .fillMaxHeight()
-            .width(100.dp)
-            .background(sidebarBg),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
+            .width(sidebarWidth)
+            .background(sidebarBg)
+            .onFocusChanged { isExpanded = it.hasFocus }
+            .padding(horizontal = 16.dp),
+        horizontalAlignment = if (isExpanded) Alignment.Start else Alignment.CenterHorizontally
     ) {
+        // Logo Section
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(top = 0.dp)
+            horizontalAlignment = if (isExpanded) Alignment.Start else Alignment.CenterHorizontally,
+            modifier = Modifier.padding(top = 24.dp)
         ) {
-            // Logo Rendering (Modular)
             if (viewModel.isModuleVisible("sidebar_logo_text")) {
-                if (logoType == "image" || logoValue.startsWith("http")) {
-                    AsyncImage(
-                        model = logoValue,
-                        contentDescription = "Logo",
-                        modifier = Modifier
-                            .size(logoSize)
-                            .padding(bottom = 8.dp),
-                        contentScale = ContentScale.Fit
-                    )
-                    Spacer(modifier = Modifier.height(0.dp))
-                } else {
+                val logoConfig = uiConfigs["sidebar_logo_text"]
+                val logoValue = logoConfig?.value ?: "R"
+                
+                Box(
+                    modifier = Modifier.height(80.dp).fillMaxWidth(),
+                    contentAlignment = if (isExpanded) Alignment.CenterStart else Alignment.Center
+                ) {
                     Text(
-                        text = logoValue,
+                        text = if (isExpanded) (logoConfig?.value ?: "RENOVASRI") else logoValue.take(1),
                         color = logoConfig?.fontColor?.toComposeColor() ?: MaterialTheme.colorScheme.primary,
-                        fontWeight = logoConfig?.fontWeight.toFontWeight(),
-                        fontSize = logoConfig?.fontSize.toFontSize(screenWidth),
-                        fontStyle = if (logoConfig?.fontStyle == "italic") FontStyle.Italic else FontStyle.Normal,
-                        modifier = Modifier.padding(bottom = 24.dp),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        fontWeight = FontWeight.Black,
+                        fontSize = if (isExpanded) 24.sp else 32.sp,
+                        letterSpacing = if (isExpanded) 2.sp else 0.sp
                     )
                 }
             }
+        }
 
-            // Dedicated UI Modules for Sidebar Navigation
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // Navigation Items (Scrollable area)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = if (isExpanded) Alignment.Start else Alignment.CenterHorizontally
+        ) {
             activeModules.forEach { module ->
                 val itemRoute = module.key
                 val isSelected = currentRoute == itemRoute || (currentRoute?.startsWith(itemRoute) == true)
                 
-                SidebarIcon(
+                SidebarItem(
+                    label = module.label,
                     iconSource = module.icon,
-                    iconType = "icon", // Standard Material Icons
-                    defaultIcon = Icons.Default.Circle,
                     selected = isSelected,
+                    isExpanded = isExpanded,
                     onClick = {
                         navController.navigate(itemRoute) {
                             if (itemRoute == Screen.Home.route) {
@@ -306,31 +319,18 @@ fun SideNavigation(navController: NavController, viewModel: MainViewModel) {
                         }
                     }
                 )
-                Spacer(modifier = Modifier.height(4.dp)) // Ultra-compact icon spacing
+                Spacer(modifier = Modifier.height(12.dp))
             }
         }
 
-        // Profile Section (Modular)
-        if (viewModel.isModuleVisible("sidebar_profile_image")) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(bottom = 32.dp)
-            ) {
-                val profileImageUrl = uiConfigs["sidebar_profile_image"]?.value
-                    ?: "https://lh3.googleusercontent.com/aida-public/AB6AXuB-3-KdaXozzaFiu9TcFSGrrWTMpGyp5HghXlbyWPPxCzP8tyXAQQbkcK-a5bRLAJjNi01A_GhAvtmSbWaY7Q5SCHYHVcYgZ_2ZfS-dPgXBshy2skkcRkLhYOcKiopNYkWgvo1Zz_L3KSIobPIQ4Zc1jrql1XS9cJsBtCbPkoavZzWu-kbqQb0O2XdHkRPcMnpz7QhWY-gam4TMyC-o3nR0ALlJs8frfzLCbLsUf4SpKAIAhape1k95h8eAro8B9LAioJb8E-mKH0c2"
-                Surface(
-                    onClick = {},
-                    shape = ClickableSurfaceDefaults.shape(CircleShape),
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    AsyncImage(
-                        model = profileImageUrl,
-                        contentDescription = "Profile",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-            }
-        }
+        // Identity / Profile Node (Fixed at bottom)
+        Spacer(modifier = Modifier.height(16.dp))
+        ProfileNode(
+            isExpanded = isExpanded, 
+            viewModel = viewModel, 
+            navController = navController, 
+            authViewModel = authViewModel
+        )
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }

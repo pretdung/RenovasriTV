@@ -3,6 +3,9 @@ package com.example.renovasritv
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.renovasritv.ai.ClaudeOrchestrator
+import com.example.renovasritv.ai.GeminiArtist
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
@@ -44,6 +47,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _appTheme = MutableStateFlow<Map<String, ThemeColor>>(emptyMap())
     val appTheme: StateFlow<Map<String, ThemeColor>> = _appTheme
 
+    private val _providerConfigs = MutableStateFlow<List<ProviderConfig>>(emptyList())
+    val providerConfigs: StateFlow<List<ProviderConfig>> = _providerConfigs
+
+    private val _securityPin = MutableStateFlow<String?>(null)
+    val securityPin: StateFlow<String?> = _securityPin
+
+    private val claudeOrchestrator by lazy { ClaudeOrchestrator(this) }
+    private val geminiArtist by lazy { GeminiArtist(this) }
+    
+    private val _aiImagePrompt = MutableStateFlow<String?>(null)
+    val aiImagePrompt: StateFlow<String?> = _aiImagePrompt
+
+    private val _aiVisualizationUrl = MutableStateFlow<String?>(null)
+    val aiVisualizationUrl: StateFlow<String?> = _aiVisualizationUrl
+
     // --- CALCULATION ENGINE STATES (FASE 1) ---
     private val _calcCategories = MutableStateFlow<List<CalcCategory>>(emptyList())
     val calcCategories: StateFlow<List<CalcCategory>> = _calcCategories
@@ -83,8 +101,65 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         
         // Fetch Calculator Data
         fetchCalculatorData()
+        fetchProviderConfigs()
         
         setupRealtimeSync()
+    }
+
+    fun setSecurityPin(pin: String) {
+        _securityPin.value = pin
+    }
+
+    fun fetchProviderConfigs() {
+        viewModelScope.launch {
+            try {
+                val result = SupabaseConfig.client.from("provider_configs").select().decodeList<ProviderConfig>()
+                _providerConfigs.value = result
+            } catch (e: Exception) {
+                println("Supabase ProviderConfigs Error: ${e.message}")
+            }
+        }
+    }
+
+    fun saveProviderConfig(provider: String, apiKey: String) {
+        val pin = _securityPin.value
+        if (pin == null) {
+            _saveStatus.value = SaveStatus.Error("Security PIN required for encryption")
+            return
+        }
+
+        viewModelScope.launch {
+            _saveStatus.value = SaveStatus.Loading()
+            try {
+                val encryptedKey = SecurityUtils.encrypt(apiKey, pin)
+                val user = SupabaseConfig.client.auth.currentUserOrNull()
+                val config = ProviderConfig(
+                    userId = user?.id,
+                    providerName = provider,
+                    apiKeyEncrypted = encryptedKey,
+                    isActive = true
+                )
+                SupabaseConfig.client.from("provider_configs").insert(config)
+                fetchProviderConfigs()
+                _saveStatus.value = SaveStatus.Success("API Key for $provider secured and saved!")
+            } catch (e: Exception) {
+                _saveStatus.value = SaveStatus.Error("Encryption failed: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Retrieves and decrypts the API key for a specific provider.
+     * Required for Phase 4 & 5.
+     */
+    fun getDecryptedKey(provider: String): String? {
+        val pin = _securityPin.value ?: return null
+        val config = _providerConfigs.value.find { it.providerName == provider && it.isActive } ?: return null
+        return try {
+            SecurityUtils.decrypt(config.apiKeyEncrypted, pin)
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private fun getDefaultModules(): List<UIModule> {
@@ -590,7 +665,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun saveEstimation(estimation: CalcEstimation) {
         viewModelScope.launch {
-            _saveStatus.value = SaveStatus.Loading
+            _saveStatus.value = SaveStatus.Loading("Menyimpan Estimasi...")
             
             // Generate a local ID and timestamp if missing
             val timestamp = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).format(java.util.Date())
@@ -608,7 +683,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 SupabaseConfig.client.from("calc_estimations").insert(localEstimation)
                 println("DEBUG_LOG: Estimation saved to DB")
-                _saveStatus.value = SaveStatus.Success("Estimasi berhasil disimpan!")
+                
+                // --- Phase 4: Trigger AI Orchestration ---
+                _saveStatus.value = SaveStatus.Loading("The Architect sedang berpikir...")
+                val prompt = claudeOrchestrator.generateImagePrompt(localEstimation)
+                _aiImagePrompt.value = prompt
+                
+                // --- Phase 5: Trigger AI Visualization ---
+                if (prompt != null) {
+                    _saveStatus.value = SaveStatus.Loading("The Artist sedang melukis...")
+                    val imageUrl = geminiArtist.generateVisualization(prompt)
+                    _aiVisualizationUrl.value = imageUrl
+                    
+                    if (imageUrl != null) {
+                        _saveStatus.value = SaveStatus.Success("Estimasi & Visualisasi AI Selesai!")
+                    } else {
+                        _saveStatus.value = SaveStatus.Success("Estimasi Selesai (Gagal membuat Gambar)")
+                    }
+                } else {
+                    _saveStatus.value = SaveStatus.Success("Estimasi Berhasil (AI Prompt Gagal)")
+                }
+
                 fetchEstimations() // Sync with DB
             } catch (e: Exception) {
                 println("DEBUG_LOG: DB Save failed, keeping local: ${e.message}")

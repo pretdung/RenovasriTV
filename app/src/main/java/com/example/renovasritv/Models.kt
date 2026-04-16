@@ -336,9 +336,29 @@ data class CalcEstimation(
     val status: String = "draft"
 )
 
+@Serializable
+data class ProviderConfig(
+    val id: String? = null,
+    @SerialName("user_id") val userId: String? = null,
+    @SerialName("provider_name") val providerName: String,
+    @SerialName("api_key_encrypted") val apiKeyEncrypted: String,
+    @SerialName("is_active") val isActive: Boolean = true
+)
+
+@Serializable
+data class AiTask(
+    val id: String? = null,
+    @SerialName("user_id") val userId: String? = null,
+    @SerialName("task_type") val taskType: String,
+    val status: String = "pending",
+    @SerialName("input_data") val inputData: String? = null, // JSON string
+    @SerialName("output_data") val outputData: String? = null, // JSON string
+    @SerialName("error_message") val errorMessage: String? = null
+)
+
 sealed class SaveStatus {
     object Idle : SaveStatus()
-    object Loading : SaveStatus()
+    data class Loading(val message: String = "Processing...") : SaveStatus()
     data class Success(val message: String) : SaveStatus()
     data class Error(val message: String) : SaveStatus()
 }
